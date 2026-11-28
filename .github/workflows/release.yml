@@ -64,8 +64,11 @@ jobs:
         with:
           name: npm-tarballs
           path: ${{ runner.temp }}/tarballs
-      - name: Publish the platform packages, then the main package
+      - name: Publish the platform packages, wait until npm shows them, then publish the main package
         working-directory: ${{ runner.temp }}/tarballs
+        env:
+          WAIT_SECONDS: "1800"
+          WAIT_STEP_SECONDS: "20"
         run: |
           set -euo pipefail
           needed=11.5.1
@@ -74,14 +77,44 @@ jobs:
             echo "npm $have is older than $needed, which trusted publishing needs" >&2
             exit 1
           fi
-          for tarball in kerpetensh-kerpeten-*.tgz kerpeten-*.tgz; do
-            name="$(tar -xOf "$tarball" package/package.json | jq -r .name)"
-            version="$(tar -xOf "$tarball" package/package.json | jq -r .version)"
-            if npm view "$name@$version" version >/dev/null 2>&1; then
+          package_name() {
+            tar -xOf "$1" package/package.json | jq -r .name
+          }
+          package_version() {
+            tar -xOf "$1" package/package.json | jq -r .version
+          }
+          shown() {
+            npm view "$1@$2" version --prefer-online >/dev/null 2>&1
+          }
+          publish() {
+            name="$(package_name "$1")"
+            version="$(package_version "$1")"
+            if shown "$name" "$version"; then
               echo "$name@$version is already published"
             else
-              npm publish "$tarball" --access public
+              npm publish "$1" --access public
             fi
+          }
+          for tarball in kerpetensh-kerpeten-*.tgz; do
+            publish "$tarball"
+          done
+          for tarball in kerpetensh-kerpeten-*.tgz; do
+            name="$(package_name "$tarball")"
+            version="$(package_version "$tarball")"
+            waited=0
+            until shown "$name" "$version"; do
+              if [ "$waited" -ge "$WAIT_SECONDS" ]; then
+                echo "npm does not show $name@$version after $WAIT_SECONDS seconds, so kerpeten@$version is not published: an install of it would get no binary. Run this workflow again when npm shows the platform packages; it publishes only what is missing." >&2
+                exit 1
+              fi
+              echo "waiting for npm to show $name@$version ($waited s)"
+              sleep "$WAIT_STEP_SECONDS"
+              waited=$((waited + WAIT_STEP_SECONDS))
+            done
+            echo "npm shows $name@$version"
+          done
+          for tarball in kerpeten-*.tgz; do
+            publish "$tarball"
           done
 
   github-release:
