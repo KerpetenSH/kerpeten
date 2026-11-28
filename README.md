@@ -78,6 +78,14 @@ findings: 4
 
 The review covers the commits of your branch that are not on the default branch of `origin`. `--base <branch or commit>` picks another base. `--mr <n>` reviews GitHub pull request `n` or GitLab merge request `n` of the project the `origin` remote names, with its title and description, read through the GitHub CLI (`gh`) or the GitLab CLI (`glab`).
 
+With `--dry-run` nothing is written anywhere: the findings are printed. Without it, a review of a GitHub pull request writes its comments to the pull request, from the account `gh` is signed in with:
+
+```sh
+kerpeten review --mr 12
+```
+
+It writes one comment on the lines of each finding that earns one, and one summary comment, which a later run updates. A second run does not write a comment twice. Writing to a GitLab merge request is not built yet.
+
 ## Models
 
 | `provider` | What it needs |
@@ -96,14 +104,16 @@ Another endpoint that speaks the API of one of these providers works too, with `
 3. **Filter.** Findings that point to a file or to lines that do not exist are dropped.
 4. **Judge.** Each finding goes to the judge model in its own call. The judge checks it against the code and labels it: `verified`, `unverified` or `refuted`, with a priority, a nature and the effort of the fix.
 5. **Scorer.** The labels become a score from 0 to 100. The score decides what a posted review would do with the finding: a comment on its line, a line in the summary, or nothing.
-6. **Comment plan.** For a pull request or merge request, Kerpeten decides what it would write: which findings become comments on lines of the diff, which go to the one summary comment and which are already written; nothing is posted yet.
+6. **Comment plan.** For a pull request or merge request, Kerpeten decides what it would write: which findings become comments on lines of the diff, which go to the one summary comment and which are already written.
+7. **Comments.** Without `--dry-run`, Kerpeten writes the plan to the GitHub pull request: the comments on lines as one review, then the summary comment. A comment GitHub does not take on its lines goes to the summary.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
 | `kerpeten init` | Asks for the models and the comment language, writes `.kerpeten.yml` and checks the setup |
-| `kerpeten review --dry-run [--base <rev>] [--mr <n>] [--context-file <path>] [--extra-context <path or ->] [--json]` | Reviews the change and prints the findings |
+| `kerpeten review --dry-run [--base <rev>] [--mr <n>] [--context-file <path>] [--extra-context <path or ->] [--json]` | Reviews the change and prints the findings; writes nothing |
+| `kerpeten review --mr <n> [--context-file <path>] [--extra-context <path or ->] [--json]` | Reviews GitHub pull request `n`, writes its comments to the pull request and prints the findings |
 | `kerpeten auth login \| logout \| status [--models]` | Signs in with ChatGPT for models with `provider: chatgpt` |
 | `kerpeten self-check` | Checks the build without the network |
 | `kerpeten capabilities` | Lists what the build can reach (git, the file system, other processes) with the permission each one needs, the permission groups, and the harnesses with the permissions they list |

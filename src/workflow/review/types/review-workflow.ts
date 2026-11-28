@@ -1,3 +1,4 @@
+import type { ChatGptPlan } from "../../../capability/chatgpt/ChatGptPlan.ts";
 import type { KerpetenConfig } from "../../../capability/config/types/config.ts";
 import type { MergeRequest } from "../../../capability/platform/types/platform.ts";
 import type { JudgeStepResult } from "../../../harnesses/judge/types/judge.ts";
@@ -14,10 +15,14 @@ import type { Logger } from "../../../log/Logger.ts";
 
 /**
  * What one review run is about, and what belongs to that run alone: its configuration, its two model clients and its
- * log. It is also the values of the run: run components read `repo`, `pathEnv` and `log` with `@RunValue`.
+ * log. It is also the values of the run: run components read `repo`, `pathEnv` and `log` with `@RunValue`. With
+ * `dryRun` a review of a merge request writes nothing to it; without it the review writes its comments. `plan` is
+ * the ChatGPT plan the models of the run count against, when they do: once it refused a request, the review has no
+ * result, so it plans and writes no comment.
  */
 export interface ReviewInput {
   readonly repo: string;
+  readonly dryRun: boolean;
   readonly base?: string;
   readonly mr?: number;
   readonly contextFile?: string;
@@ -27,6 +32,7 @@ export interface ReviewInput {
   readonly config: KerpetenConfig;
   readonly reviewerClient: ProviderLlm;
   readonly judgeClient: ProviderLlm;
+  readonly plan?: ChatGptPlan | undefined;
   readonly log: Logger;
 }
 
@@ -38,11 +44,28 @@ export interface ReviewedMergeRequest extends MergeRequest {
 /**
  * The result of the review workflow: the local review, and the merge request with the plan of its comments when the
  * review was of one. The action of a finding is then the one the comment plan gives it.
+ *
+ * `unwritten` is there when the review wrote its comments to the merge request: one line for each comment that could
+ * not be written, and no line when all were. `commentPlan` is then the plan as it was carried out, and the findings
+ * carry the refs of their comments. It is there too, with one line that says why, when the review was to write and
+ * wrote no comment at all: because the merge request got a new commit during the review, or because the judge could
+ * not judge any finding. In the second case there is no plan.
  */
 export interface ReviewResult extends Omit<LocalReviewResult, "findings"> {
   readonly findings: readonly PlannedFinding[];
   readonly mergeRequest?: ReviewedMergeRequest;
   readonly commentPlan?: CommentPlan;
+  readonly unwritten?: readonly string[];
+}
+
+/**
+ * What a review wrote to its merge request: the comment plan as it was carried out, and one line for each comment
+ * that could not be written. A review that was to write and wrote no comment at all has one line that says why, and
+ * no plan when it never had one.
+ */
+export interface CommentWrite {
+  readonly plan: CommentPlan | undefined;
+  readonly failures: readonly string[];
 }
 
 export interface ReportBasis {
@@ -64,6 +87,7 @@ export interface ReviewOutcome {
   readonly judged: JudgeStepResult | undefined;
   readonly findings: readonly JudgedFinding[];
   readonly commentPlan: CommentPlan | undefined;
+  readonly commentWrite: CommentWrite | undefined;
 }
 
 export interface ReviewChange extends ReportBasis {

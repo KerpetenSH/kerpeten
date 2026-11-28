@@ -17,6 +17,10 @@ export class CommentWords {
       `Reviewed commit ${commit}. Line comments in this run: ${lineComments}.${
         alreadyWritten > 0 ? ` Findings that already had a line comment: ${alreadyWritten}.` : ""
       }`,
+    unwritten: (count) =>
+      `Findings whose comment may be missing here, because writing it failed: ${count}. The output of the review run lists them.`,
+    unjudged: (count) =>
+      `Findings that could not be checked, so they are not written here: ${count}. The output of the review run lists them.`,
     partial: (reason) => `**Partial review:** the review stopped early (${reason}), so it may have missed findings.`,
     omitted: (count) => `Findings not shown here, because the comment would be too long: ${count}.`,
   };
@@ -32,6 +36,10 @@ export class CommentWords {
       `İncelenen commit: ${commit}. Bu çalıştırmadaki satır yorumları: ${lineComments}.${
         alreadyWritten > 0 ? ` Satır yorumu zaten olan bulgular: ${alreadyWritten}.` : ""
       }`,
+    unwritten: (count) =>
+      `Yazılması başarısız olduğu için yorumu burada eksik olabilecek bulgular: ${count}. İnceleme çalıştırmasının çıktısında listelenir.`,
+    unjudged: (count) =>
+      `Doğrulanamadığı için buraya yazılmayan bulgular: ${count}. İnceleme çalıştırmasının çıktısında listelenir.`,
     partial: (reason) => `**Kısmi inceleme:** inceleme erken durdu (${reason}); gözden kaçan bulgular olabilir.`,
     omitted: (count) => `Yorum çok uzun olacağı için burada gösterilmeyen bulgular: ${count}.`,
   };

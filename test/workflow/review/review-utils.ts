@@ -48,9 +48,18 @@ export function config(extra = ""): KerpetenConfig {
   return parsed.config;
 }
 
-/** What belongs to a run besides its change: the default configuration, two model clients never called and a silent log. */
-export function runValues(): Pick<ReviewInput, "config" | "reviewerClient" | "judgeClient" | "log"> {
-  return { config: config(), reviewerClient: mockClient([]).client, judgeClient: mockClient([]).client, log };
+/**
+ * What belongs to a run besides its change: a dry run, the default configuration, two model clients never called and
+ * a silent log.
+ */
+export function runValues(): Pick<ReviewInput, "dryRun" | "config" | "reviewerClient" | "judgeClient" | "log"> {
+  return {
+    dryRun: true,
+    config: config(),
+    reviewerClient: mockClient([]).client,
+    judgeClient: mockClient([]).client,
+    log,
+  };
 }
 
 export function cleanDirs(): void {

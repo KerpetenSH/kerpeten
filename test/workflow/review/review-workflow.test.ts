@@ -141,6 +141,7 @@ describe("local review", () => {
     const mock = mockClient([{ text: "done" }, { text: JSON.stringify({ findings }) }]);
 
     const result = await workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mock.client,
       judgeClient: judgeLlm(),
@@ -190,6 +191,7 @@ describe("local review", () => {
     const mock = mockClient([{ text: "done" }, { text: JSON.stringify({ findings }) }]);
 
     const result = await workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mock.client,
       judgeClient: judgeLlm(),
@@ -209,6 +211,7 @@ describe("local review", () => {
 
     const review = () =>
       workflow.run({
+        dryRun: true,
         config: config(),
         reviewerClient: mock.client,
         judgeClient: judgeLlm(),
@@ -238,6 +241,7 @@ describe("local review", () => {
     write(repo, Object.fromEntries(names.map((name) => [name, "two\n"])));
 
     const run = workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mockClient([]).client,
       judgeClient: judgeLlm(),
@@ -258,6 +262,7 @@ describe("local review", () => {
     writeFileSync(join(repo, "new.ts"), "untracked\n");
 
     const result = await workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mockClient([{ text: "done" }, { text: '{"findings":[]}' }]).client,
       judgeClient: judgeLlm(),
@@ -293,6 +298,7 @@ describe("local review", () => {
     ]);
 
     await workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mock.client,
       judgeClient: judgeLlm(),
@@ -320,6 +326,7 @@ describe("local review", () => {
     const mock = mockClient([]);
 
     const result = await workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mock.client,
       judgeClient: judgeLlm(),
@@ -347,6 +354,7 @@ describe("local review", () => {
     ]);
 
     const result = await workflow.run({
+      dryRun: true,
       config: config("limits: { max_tool_calls: 1 }\n"),
       reviewerClient: mock.client,
       judgeClient: judgeLlm(),
@@ -371,6 +379,7 @@ describe("local review", () => {
     const { repo } = repoWithBranch();
 
     const run = workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mockClient([]).client,
       judgeClient: judgeLlm(),
@@ -383,6 +392,7 @@ describe("local review", () => {
 
     await expect(
       workflow.run({
+        dryRun: true,
         config: config(),
         reviewerClient: mockClient([]).client,
         judgeClient: judgeLlm(),
@@ -403,6 +413,7 @@ describe("local review", () => {
     const mock = mockClient([{ text: "done" }, { text: '{"findings":[]}' }]);
 
     const result = await workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mock.client,
       judgeClient: judgeLlm(),
@@ -419,6 +430,7 @@ describe("local review", () => {
     const mock = mockClient([{ text: "done" }, { text: '{"findings":[]}' }]);
 
     await workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mock.client,
       judgeClient: judgeLlm(),
@@ -441,6 +453,7 @@ describe("local review", () => {
       const mock = mockClient([{ text: "done" }, { text: '{"findings":[]}' }]);
 
       await workflow.run({
+        dryRun: true,
         config: config(),
         reviewerClient: mock.client,
         judgeClient: judgeLlm(),
@@ -460,6 +473,7 @@ describe("local review", () => {
     const mock = mockClient([]);
 
     const run = workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mock.client,
       judgeClient: judgeLlm(),
@@ -484,6 +498,7 @@ describe("local review", () => {
     const judge = mockClient([]);
 
     const run = workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: reviewer.client,
       judgeClient: judge.client,
@@ -530,6 +545,7 @@ describe("local review", () => {
     });
 
     const result = await workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mock.client,
       judgeClient: judge,
@@ -571,6 +587,7 @@ describe("local review", () => {
     );
 
     const result = await workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mock.client,
       judgeClient: judge,
@@ -596,6 +613,7 @@ describe("local review", () => {
     const mock = mockClient([{ text: "done" }, { text: JSON.stringify({ findings: [{ ...good, file: "nope.ts" }] }) }]);
 
     const result = await workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mock.client,
       judgeClient: judge,
@@ -617,6 +635,7 @@ describe("local review", () => {
     const second = { ...good, start_line: 5, end_line: 6, title: "Second" };
 
     const result = await (await reviewComponent(ReviewWorkflow, () => clock.now)).run({
+      dryRun: true,
       config: config("limits: { max_judge_parallel: 1, max_judge_duration_minutes: 1 }\n"),
       reviewerClient: mockClient([{ text: "done" }, { text: JSON.stringify({ findings: [good, second] }) }]).client,
       judgeClient: judgeLlm(() => ({ onRun: () => (clock.now += 50_000) })),
@@ -664,6 +683,7 @@ describe("local review", () => {
     };
 
     const result = await (await reviewComponent(ReviewWorkflow, () => clock.now)).run({
+      dryRun: true,
       config: config("limits: { max_duration_minutes: 20, max_judge_duration_minutes: 10 }\n"),
       reviewerClient: slowReviewer,
       judgeClient: judgeLlm(),
@@ -687,6 +707,7 @@ describe("local review", () => {
       const judge = judgeLlm(() => ({ delayMs: 20, toolCalls: 4 }));
 
       const result = await workflow.run({
+        dryRun: true,
         config: config(extra),
         reviewerClient: mockClient([{ text: "done" }, { text: JSON.stringify({ findings }) }]).client,
         judgeClient: judge,
@@ -734,6 +755,7 @@ describe("local review", () => {
     const judge = judgeLlm(() => ({ toolCalls: 2 }));
 
     const result = await workflow.run({
+      dryRun: true,
       config: config(),
       reviewerClient: mockClient([
         { toolCalls: [{ name: "list_dir", input: {} }] },
@@ -764,6 +786,7 @@ describe("local review", () => {
     const judge = judgeLlm(() => ({ toolCalls: 2 }));
 
     const review = workflow.run({
+      dryRun: true,
       config: config("limits: { max_judge_parallel: 2 }\n"),
       reviewerClient: reviewer.client,
       judgeClient: judge,
@@ -796,6 +819,7 @@ describe("local review", () => {
       "judge",
       "score",
       "comment-plan",
+      "comment-write",
     ]);
 
     expect(spec.steps.every((step) => flowStepSpec(step).description.endsWith("."))).toBe(true);

@@ -25,12 +25,13 @@ import type { ReviewFlags } from "./types/review-command.ts";
  * chain and which joins its run of the flag's permission group, and prints the result. An error of the local review
  * ends the command with 2 when the input was wrong, which a pull request or merge request of `--mr` is that the user
  * can make readable, and with 1 otherwise, a failure of the platform among them, or with the ChatGPT plan's stop when
- * the plan stopped it.
+ * the plan stopped it. A review that wrote its comments ends with 1 when one of them could not be written, after the
+ * findings are printed.
  */
 @Workflow({
   name: "review-command",
   description:
-    "Review the change between the base branch and HEAD and print the findings. The reviewer model finds them, the judge model checks and labels each one, and the scorer gives it a score and the action a posted review would take. Both models only read the repository. --mr <n> reviews pull request n on GitHub, read with gh, or merge request n on GitLab, read with glab, of the project the origin remote names, with its title and description, and shows the comments a posted review would write to it, without writing them; HEAD must be its last commit. This build needs --dry-run.",
+    "Review the change between the base branch and HEAD and print the findings. The reviewer model finds them, the judge model checks and labels each one, and the scorer gives it a score and the action a posted review would take. Both models only read the repository. --mr <n> reviews pull request n on GitHub, read with gh, or merge request n on GitLab, read with glab, of the project the origin remote names, with its title and description; HEAD must be its last commit. Without --dry-run the review writes its comments to the pull request, from the account gh is signed in with: one comment on the lines of each finding that earns one, and one summary comment. With --dry-run it writes nothing and shows the comments it would write. Writing to GitLab is not built yet, and a review without --mr needs --dry-run.",
   steps: [ReviewFlagStep, ReviewSetupStep, ReviewWorkflow, ReviewOutcomeStep, ReviewPrintStep],
   command: {
     name: "review",
@@ -129,7 +130,8 @@ export class ReviewCommand extends WorkflowBase<ReviewFlags, After<typeof Review
     return this.command.fail(error instanceof ReviewInputError ? ExitCode.USAGE : ExitCode.FAILED, errorMessage(error));
   }
 
-  protected finish(): number {
-    return ExitCode.OK;
+  /** 0, or 1 when the review wrote its comments and at least one of them could not be written. */
+  protected finish(state: After<typeof ReviewPrintStep>): number {
+    return (state.unwritten?.length ?? 0) > 0 ? ExitCode.FAILED : ExitCode.OK;
   }
 }

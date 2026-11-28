@@ -6,12 +6,13 @@ import type { ReviewSetupStep } from "./ReviewSetupStep.ts";
 
 /**
  * Looks at the result of the local review, which ran before it: logs its usage, ends with 1 when the ChatGPT plan
- * stopped the review or the reviewer gave no result, and reports a partial review on stderr, after which the command
- * goes on.
+ * stopped the review or the reviewer gave no result, and reports on stderr a partial review and each comment that
+ * could not be written to the merge request, one line each, after which the command goes on to print the findings.
  */
 @FlowStep({
   name: "review-outcome",
-  description: "Logs the usage of the local review and reports a stopped, failed or partial review.",
+  description:
+    "Logs the usage of the local review and reports a stopped, failed or partial review and each comment that could not be written.",
 })
 export class ReviewOutcomeStep extends FlowStepBase {
   public execute(state: After<typeof ReviewSetupStep> & ReviewResult) {
@@ -37,6 +38,8 @@ export class ReviewOutcomeStep extends FlowStepBase {
 
     if (state.judgePartialReason !== undefined)
       this.command.report(`partial judge stage (${state.judgePartialReason})`);
+
+    for (const failure of state.unwritten ?? []) this.command.report(failure);
 
     return {};
   }

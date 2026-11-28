@@ -4,6 +4,7 @@ import type { z } from "zod";
 import { Names } from "../../app/Names.ts";
 import type { Instances } from "../../app/types/app.ts";
 import { terminalLine } from "../../text/text-utils.ts";
+import { CommentRef } from "./CommentRef.ts";
 import { JsonLines } from "./JsonLines.ts";
 import { LimitedOutput } from "./LimitedOutput.ts";
 import { OriginProject } from "./OriginProject.ts";
@@ -221,6 +222,7 @@ export class GitLabPlatform extends ProcessCapability implements Platform {
 
     return {
       id: String(note.id),
+      ref: CommentRef.of("gitlab", "note", note.id).text,
       kind: position === undefined ? "general" : "line",
       author: note.author?.username ?? null,
       body: note.body,

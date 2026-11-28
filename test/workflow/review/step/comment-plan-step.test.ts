@@ -65,7 +65,8 @@ describe("comment plan flow step", () => {
     expect(limited.commentPlan?.findings.map((finding) => finding.action)).toEqual(["summary"]);
     expect(limited.commentPlan?.summary.body).toStartWith("## Kerpeten incelemesi\n");
 
-    const written = [{ kind: "line" as const, mark: CommentMarker.finding(head, "src/a.ts", 2, 2).mark }];
+    const mark = CommentMarker.finding(head, "src/a.ts", 2, 2).mark;
+    const written = [{ kind: "line" as const, mark, ref: "github:review_comment/7" }];
     const again = step.execute({ ...state, written });
 
     expect(again.commentPlan?.findings.map((finding) => finding.action)).toEqual(["suppressed_duplicate"]);
@@ -95,6 +96,40 @@ describe("comment plan flow step", () => {
     );
 
     expect(step.execute(state).commentPlan?.summary.body).not.toContain("Partial review");
+  });
+
+  test("a review that is to write and whose judge could not judge any of its findings has no comment plan; a dry run of it and a review with a judged finding have, and the summary counts the others", async () => {
+    const { repo } = repoWithBranch();
+    const step = await reviewComponent(CommentPlanStep);
+    const state = await scoredState(repo, []);
+    const { verdict: _v, priority: _p, nature: _n, fix_effort: _e, rationale: _r, score: _s, ...reviewed } = scored;
+    const unjudged: JudgedFinding = { ...reviewed, judge_error: "model_error: overloaded", action: "stored" };
+
+    const none = [unjudged, { ...unjudged, title: "Other" }];
+
+    expect(step.execute({ ...state, dryRun: false, findings: none })).toEqual({ commentPlan: undefined });
+
+    const dry = step.execute({ ...state, dryRun: true, findings: none }).commentPlan;
+
+    expect(dry?.counts).toEqual({ inline: 0, summary: 0, duplicate: 0, stored: 2 });
+    expect(dry?.summary.body).not.toContain("nothing to report");
+    expect(dry?.summary.body).toContain("Findings that could not be checked, so they are not written here: 2.");
+
+    const mixed = step.execute({
+      ...state,
+      dryRun: false,
+      findings: [unjudged, scored, { ...unjudged, title: "Other" }],
+    });
+
+    expect(mixed.commentPlan?.findings.map((finding) => finding.action)).toEqual(["stored", "inline", "stored"]);
+
+    expect(mixed.commentPlan?.summary.body).toContain(
+      "Findings that could not be checked, so they are not written here: 2. The output of the review run lists them.",
+    );
+
+    expect(step.execute({ ...state, findings: [] }).commentPlan?.summary.body).toContain(
+      "The review found nothing to report.",
+    );
   });
 
   test("a review whose reviewer gave no result has no comment plan", async () => {

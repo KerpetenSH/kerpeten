@@ -85,13 +85,14 @@ describe("cli", () => {
     });
   }
 
-  test("commands not built yet fail loudly instead of pretending to run", async () => {
-    for (const argv of [["review", "--base", "main"]]) {
-      const result = await run(...argv);
+  test("a review that would write but names no pull request is a usage error that says what to do", async () => {
+    const result = await run("review", "--base", "main");
 
-      expect(result.code).toBe(ExitCode.FAILED);
-      expect(result.err).toContain("not implemented");
-    }
+    expect(result.code).toBe(ExitCode.USAGE);
+
+    expect(result.err).toBe(
+      "kerpeten review: a review without --dry-run writes its comments to a pull request, and this one names none, so it has nowhere to write: give --mr <n> to review pull request n and write to it, or --dry-run to only print the findings",
+    );
   });
 
   test("a wrong harness wiring stops every call, help and version included, with every problem", async () => {

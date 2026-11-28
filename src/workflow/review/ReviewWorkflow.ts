@@ -13,6 +13,7 @@ import { ReviewReport } from "./ReviewReport.ts";
 import { CandidateStep } from "./step/CandidateStep.ts";
 import { ChangeStep } from "./step/ChangeStep.ts";
 import { CommentPlanStep } from "./step/CommentPlanStep.ts";
+import { CommentWriteStep } from "./step/CommentWriteStep.ts";
 import { JudgeStep } from "./step/JudgeStep.ts";
 import { MergeRequestStep } from "./step/MergeRequestStep.ts";
 import { ReviewerStep } from "./step/ReviewerStep.ts";
@@ -23,15 +24,16 @@ import type { ReviewInput, ReviewResult } from "./types/review-workflow.ts";
 /**
  * The local review: reads the merge request when the review is of one, reads the change and the comments Kerpeten
  * already wrote to the merge request, runs the reviewer, filters its findings, judges and scores the kept ones, plans
- * the comments of the merge request and reports the result. Nothing is written to the merge request. An empty change
- * ends after the change flow step. The kit checks the run's grant against the reviewer and the judge before git is
- * touched. Expected failures and partial runs are part of the result; a wrong input, a refused grant among them,
- * throws `ReviewInputError`.
+ * the comments of the merge request, writes them unless the review is a dry run, and reports the result. A dry run
+ * and a review of no merge request write nothing. An empty change ends after the change flow step, and writes
+ * nothing either. The kit checks the run's grant against the reviewer and the judge before git is touched. Expected
+ * failures and partial runs are part of the result, and so is a comment that could not be written; a wrong input, a
+ * refused grant among them, throws `ReviewInputError`.
  */
 @Workflow({
   name: "review",
   description:
-    "Reviews the change between the base branch and HEAD, or the change of a merge request whose last commit is HEAD: reads the change, runs the reviewer, keeps the findings that point at real lines, has the judge check them, scores them, plans the comments of a merge request without writing them and reports the result.",
+    "Reviews the change between the base branch and HEAD, or the change of a merge request whose last commit is HEAD: reads the change, runs the reviewer, keeps the findings that point at real lines, has the judge check them, scores them, plans the comments of a merge request, writes them unless the review is a dry run and reports the result.",
   steps: [
     MergeRequestStep,
     ChangeStep,
@@ -41,9 +43,10 @@ import type { ReviewInput, ReviewResult } from "./types/review-workflow.ts";
     JudgeStep,
     ScoreStep,
     CommentPlanStep,
+    CommentWriteStep,
   ],
 })
-export class ReviewWorkflow extends WorkflowBase<ReviewInput, After<typeof CommentPlanStep>, ReviewResult> {
+export class ReviewWorkflow extends WorkflowBase<ReviewInput, After<typeof CommentWriteStep>, ReviewResult> {
   public static deadlines(start: number, minutes: number): Deadlines {
     return deadlines(start, minutes);
   }
@@ -64,7 +67,7 @@ export class ReviewWorkflow extends WorkflowBase<ReviewInput, After<typeof Comme
     throw error;
   }
 
-  protected finish(state: After<typeof CommentPlanStep>): ReviewResult {
+  protected finish(state: After<typeof CommentWriteStep>): ReviewResult {
     return ReviewReport.of(state.change, state);
   }
 }

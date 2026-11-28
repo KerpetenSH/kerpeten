@@ -8,7 +8,7 @@
         "@ai-sdk/anthropic": "4.0.107",
         "@ai-sdk/openai": "4.0.122",
         "@asenajs/ioc": "0.2.0",
-        "@kerpetensh/harness-kit": "0.1.0",
+        "@kerpetensh/harness-kit": "0.2.0",
         "@openrouter/ai-sdk-provider": "3.1.0",
         "ai": "7.0.179",
         "zod": "4.6.7",
@@ -90,7 +90,7 @@
 
     "@clack/prompts": ["@clack/prompts@1.9.0", "", { "dependencies": { "@clack/core": "1.6.0", "fast-string-width": "^3.0.2", "fast-wrap-ansi": "^0.2.0", "sisteransi": "^2.0.0" } }, "sha512-tEj8X2No2A1c9NDnZECxiiJ8TP3vmFlN9tLlLeSaMqVW4tUmVG2R4qpv/eP4zymWxnymYLkLcIYVV0VcWj3RCQ=="],
 
-    "@kerpetensh/harness-kit": ["@kerpetensh/harness-kit@0.1.0", "", { "peerDependencies": { "@ai-sdk/anthropic": "^4.0.107", "@ai-sdk/openai": "^4.0.122", "@asenajs/ioc": "^0.2.0", "@openrouter/ai-sdk-provider": "^3.1.0", "ai": "^7.0.179", "zod": "^4.6.7" }, "optionalPeers": ["@ai-sdk/anthropic", "@ai-sdk/openai", "@openrouter/ai-sdk-provider", "ai"] }, "sha512-5fe/KdZOogPT1u7sDLXpzXetNdKYReX6sA3Rnlc+3daPyf4d5wPTIQD5fvLs5Ykm3WmjDbeIG9VOlyiQMcLfoA=="],
+    "@kerpetensh/harness-kit": ["@kerpetensh/harness-kit@0.2.0", "", { "peerDependencies": { "@ai-sdk/anthropic": "^4.0.107", "@ai-sdk/openai": "^4.0.122", "@asenajs/ioc": "^0.2.0", "@openrouter/ai-sdk-provider": "^3.1.0", "ai": "^7.0.179", "zod": "^4.6.7" }, "optionalPeers": ["@ai-sdk/anthropic", "@ai-sdk/openai", "@openrouter/ai-sdk-provider", "ai"] }, "sha512-LCmHDfCNGuQp1CsN5wB7dyHDh+93QJo+FguDjp2D+loV5h06pHVVbn0Rnlnh25LD+bCNZtmQy5qg55uWbWQyuQ=="],
 
     "@manypkg/find-root": ["@manypkg/find-root@3.1.0", "", { "dependencies": { "@manypkg/tools": "^2.1.0" } }, "sha512-BcSqCyKhBVZ5YkSzOiheMCV41kqAFptW6xGqYSTjkVTl9XQpr+pqHhwgGCOHQtjDCv7Is6EFyA14Sm5GVbVABA=="],
 

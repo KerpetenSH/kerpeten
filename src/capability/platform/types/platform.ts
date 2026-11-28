@@ -47,9 +47,13 @@ export interface PlatformLines {
  * A field that does not exist for a comment is `null`: `file`, `lines`, `side` and `replyTo` of a general comment,
  * `lines` and `side` of a comment on a whole file, `replyTo` of a comment that starts a thread. The author and the
  * body are outside data.
+ *
+ * `ref` names the comment on its platform, in the form `CommentRef` writes: with the merge request known it is enough
+ * to find the comment again.
  */
 export interface PlatformComment {
   readonly id: string;
+  readonly ref: string;
   readonly kind: PlatformCommentKind;
   readonly author: string | null;
   readonly body: string;
@@ -109,4 +113,91 @@ export type PlatformFailure = "cli_missing" | "signed_out" | "not_found" | "no_r
 export interface Platform {
   mergeRequest(number: number): Promise<MergeRequest>;
   comments(number: number): Promise<PlatformComments>;
+}
+
+/**
+ * The kind of comment a `CommentRef` names. On GitHub: `review_comment` is a comment on lines, `issue_comment` a
+ * comment of the conversation of a pull request, `review` the body of a review. On GitLab: `note`.
+ */
+export type CommentRefKind = "review_comment" | "issue_comment" | "review" | "note";
+
+/**
+ * A comment to write on lines of the file as the change of a merge request leaves it, from `startLine` to `endLine`.
+ * `marker` is the text that ends `body`: a platform that gives no id when it takes the comment reads its comments
+ * back and knows this one by the marker its text ends with.
+ */
+export interface PlatformLineComment {
+  readonly file: string;
+  readonly startLine: number;
+  readonly endLine: number;
+  readonly body: string;
+  readonly marker: string;
+}
+
+/**
+ * A write that failed. `message` says why and what to do. It starts with `not written:` when the platform wrote
+ * nothing for sure. After a time limit it is not known whether the platform wrote, and the message says so.
+ */
+export interface FailedWrite {
+  readonly kind: "failed";
+  readonly message: string;
+}
+
+/**
+ * What became of one line comment that was given to a platform:
+ *
+ * - `written`: it is on the merge request, and `ref` names it.
+ * - `refused`: the platform does not take a comment on these lines, and wrote nothing; `reason` is what it answered.
+ * - `failed`: the write failed for another reason.
+ */
+export type LineCommentOutcome =
+  | { readonly kind: "written"; readonly ref: string }
+  | { readonly kind: "refused"; readonly reason: string }
+  | FailedWrite;
+
+/**
+ * What became of the line comments of one write: one outcome per comment, in the order the comments were given.
+ * `problems` says, one line each, what went wrong beside the outcomes, such as ids that could not be read back.
+ */
+export interface LineCommentWrite {
+  readonly outcomes: readonly LineCommentOutcome[];
+  readonly problems: readonly string[];
+}
+
+/**
+ * What became of the summary comment:
+ *
+ * - `written`: it is on the merge request; `ref` names it and `updated` says whether a comment that was there got
+ *   the new text.
+ * - `refused`: the comment that was to be updated cannot be: the platform does not let this account change it, or
+ *   it is gone. Nothing was written, and another comment may be tried or a new one made. `reason` says what the
+ *   platform answered. A write that makes a new comment is never refused in this sense.
+ * - `failed`: the write failed for another reason.
+ */
+export type SummaryWrite =
+  | { readonly kind: "written"; readonly ref: string; readonly updated: boolean }
+  | { readonly kind: "refused"; readonly reason: string }
+  | FailedWrite;
+
+/**
+ * What the review writes to the platform a merge request lives on. Neither method throws for a write the platform
+ * failed at: the outcome says what happened, so one comment that cannot be written does not stop the others.
+ */
+export interface PlatformWriter {
+  /**
+   * Writes `comments` on lines of merge request `number` as it is at the commit `headSha`, the one the review was
+   * of.
+   */
+  writeLineComments(
+    number: number,
+    headSha: string,
+    comments: readonly PlatformLineComment[],
+  ): Promise<LineCommentWrite>;
+
+  /**
+   * Writes the one summary comment of merge request `number`. With `existing`, the ref of a summary comment that is
+   * there, that comment gets the new text, or the write is `refused` when this account cannot change it; without
+   * `existing` a new comment is made. A ref that names no comment a summary can be throws an error.
+   */
+  writeSummary(number: number, body: string, existing?: string): Promise<SummaryWrite>;
 }

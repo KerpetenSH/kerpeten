@@ -1,6 +1,8 @@
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sh } from "../git/git-utils.ts";
+import { FakeGitHub } from "./FakeGitHub.ts";
+import type { FakeGitHubCall, FakeGitHubStart, FakeGitHubState } from "./types/fake-github.ts";
 import type {
   CliAnswer,
   CliName,
@@ -101,6 +103,46 @@ export function fakeCli(dir: string, name: CliName, answers: Readonly<Record<str
 /** A fake gh in `dir`, see `fakeCli`. */
 export function fakeGh(dir: string, answers: Readonly<Record<string, CliAnswer>>, before = ""): string {
   return fakeCli(dir, "gh", answers, before);
+}
+
+/**
+ * A fake gh in `dir` that is a GitHub of its own, see `FakeGitHub`: it keeps what is written to it in a file there, so
+ * a later call reads it. Returns the path of the script. The script names the program that runs the tests by its
+ * whole path, so it needs no PATH.
+ */
+export function fakeGitHub(dir: string, start: FakeGitHubStart = {}): string {
+  const state: FakeGitHubState = {
+    pull: start.pull ?? pullJson(),
+    pullReads: 0,
+    nextId: 9001,
+    reviews: [],
+    lineComments: [...(start.lineComments ?? [])],
+    conversation: [...(start.conversation ?? [])],
+    rules: start.rules ?? {},
+    calls: [],
+  };
+
+  const source = join(import.meta.dir, "FakeGitHub.ts");
+
+  const program = `import { FakeGitHub } from ${JSON.stringify(source)}; process.exit(await FakeGitHub.main(${JSON.stringify(dir)}, process.argv.slice(1)));`;
+
+  const path = join(dir, "gh");
+
+  writeFileSync(join(dir, FakeGitHub.STATE_FILE), JSON.stringify(state));
+  writeFileSync(path, ["#!/bin/sh", `exec ${quoted(process.execPath)} -e ${quoted(program)} -- "$@"`, ""].join("\n"));
+  chmodSync(path, 0o755);
+
+  return path;
+}
+
+/** What the fake GitHub in `dir` holds now. */
+export function gitHub(dir: string): FakeGitHubState {
+  return FakeGitHub.read(dir);
+}
+
+/** The calls of the fake gh in `dir` that wrote, in order: those that were given a body on standard input. */
+export function gitHubWrites(dir: string): FakeGitHubCall[] {
+  return gitHub(dir).calls.filter((call) => call.input !== undefined);
 }
 
 /** A fake glab in `dir`, see `fakeCli`. */

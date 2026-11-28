@@ -970,11 +970,14 @@ describe("kerpeten review --dry-run", () => {
     expect(result.calls.length).toBe(0);
   });
 
-  test("review without --dry-run is not implemented yet", async () => {
+  test("a review without --dry-run and without --mr has nowhere to write: a usage error before the repository is read or a model is called", async () => {
     const dir = repo();
     const result = await run(dir, ["review", "--base", "main"]);
 
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(2);
+    expect(result.err).toContain("it has nowhere to write: give --mr <n>");
+    expect(result.err).toContain("or --dry-run to only print the findings");
+    expect(result.created).toEqual([]);
     expect(result.calls.length).toBe(0);
   });
 });

@@ -63,3 +63,22 @@ export const githubIssueCommentSchema = z.object({
   body: z.string(),
   created_at: z.string(),
 });
+
+/** What GitHub answers when it made or changed something: a review, or a comment of the conversation. Its id is all the review reads. */
+export const githubWrittenSchema = z.object({ id });
+
+/**
+ * A comment of one review as `GET /repos/{owner}/{repo}/pulls/{number}/reviews/{review_id}/comments` lists it. Only
+ * its id and its text are read: the text ends with the marker the comment is known by.
+ */
+export const githubWrittenCommentSchema = z.object({ id, body: z.string() });
+
+/**
+ * The body GitHub sends with an error. `errors` is a list of texts or of objects with a `message`, or one text;
+ * `status` is the HTTP status as text.
+ */
+export const githubWriteErrorSchema = z.object({
+  message: z.string().optional(),
+  errors: z.unknown().optional(),
+  status: z.string().optional(),
+});

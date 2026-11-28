@@ -1,11 +1,12 @@
 import { RunService, RunValue, Use } from "@kerpetensh/harness-kit";
 import { ConfigLoader } from "../config/ConfigLoader.ts";
 import type { KerpetenConfig } from "../config/types/config.ts";
+import { GitHubCommentWriter } from "./GitHubCommentWriter.ts";
 import { GitHubPlatform } from "./GitHubPlatform.ts";
 import { GitLabPlatform } from "./GitLabPlatform.ts";
 import { OriginProject } from "./OriginProject.ts";
 import { PlatformChoiceError } from "./PlatformChoiceError.ts";
-import type { Platform, PlatformKind } from "./types/platform.ts";
+import type { Platform, PlatformKind, PlatformWriter } from "./types/platform.ts";
 
 /**
  * The platform of the run's repository, chosen once per run and before any platform tool runs. The `platform` key of
@@ -15,6 +16,9 @@ import type { Platform, PlatformKind } from "./types/platform.ts";
  *
  * The key names only the kind. The host and the project of a review always come from the `origin` remote, through
  * `OriginProject`, which is also what refuses a repository without an `origin` remote.
+ *
+ * Reading and writing are two capabilities per platform, and the choice gives each on its own: `platform` the one
+ * that reads, `writer` the one that writes comments. Kerpeten writes to GitHub only; GitLab has no writer yet.
  */
 @RunService("kerpeten:platform-choice")
 export class PlatformChoice {
@@ -34,6 +38,9 @@ export class PlatformChoice {
   @Use(GitLabPlatform)
   private readonly gitlab!: GitLabPlatform;
 
+  @Use(GitHubCommentWriter)
+  private readonly githubWriter!: GitHubCommentWriter;
+
   @RunValue("config")
   private readonly config!: KerpetenConfig;
 
@@ -51,6 +58,19 @@ export class PlatformChoice {
     const platforms: Readonly<Record<PlatformKind, Platform>> = { github: this.github, gitlab: this.gitlab };
 
     return platforms[await this.kind()];
+  }
+
+  /**
+   * The capability that writes the comments of a review to the run's platform, or `undefined` when Kerpeten cannot
+   * write to that platform yet, which is so for GitLab.
+   */
+  public async writer(): Promise<PlatformWriter | undefined> {
+    const writers: Readonly<Record<PlatformKind, PlatformWriter | undefined>> = {
+      github: this.githubWriter,
+      gitlab: undefined,
+    };
+
+    return writers[await this.kind()];
   }
 
   private async choose(): Promise<PlatformKind> {

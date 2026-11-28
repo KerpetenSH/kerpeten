@@ -28,20 +28,28 @@ export interface MergeRequestJson {
   readonly base_sha: string;
 }
 
-/** A line comment of the comment plan in the JSON output: where it would be written, and its whole text. */
+/**
+ * A line comment of the comment plan in the JSON output: where it would be written, and its whole text. A comment
+ * that was written has its ref as `comment_ref`.
+ */
 export interface LineCommentJson {
   readonly file: string;
   readonly start_line: number;
   readonly end_line: number;
   readonly body: string;
+  readonly comment_ref?: string;
 }
 
-/** The summary comment of the comment plan in the JSON output: its whole text. */
+/** The summary comment of the comment plan in the JSON output: its whole text, and its ref as `comment_ref` when it was written. */
 export interface SummaryCommentJson {
   readonly body: string;
+  readonly comment_ref?: string;
 }
 
-/** The comment plan in the JSON output: what a posted review would write to the merge request. */
+/**
+ * The comment plan in the JSON output: what a posted review would write to the merge request. For a review that
+ * wrote its comments it is what was written: the line comments are the written ones.
+ */
 export interface CommentPlanJson {
   readonly line_comments: readonly LineCommentJson[];
   readonly summary: SummaryCommentJson;

@@ -10,6 +10,11 @@ import type { CommentPlanJson, MergeRequestJson, ReviewJson } from "./types/revi
 /**
  * Prints the result of a review on stdout, as text or as JSON. A review of a merge request also shows its comment
  * plan: one line of counts in the text, and in the JSON the texts of the line comments and of the summary comment.
+ *
+ * A review that wrote its comments shows the plan as it was carried out. Every finding shows its action and, when a
+ * comment stands for it, the ref of that comment as `comment_ref`: its own line comment for `inline`, the summary
+ * comment for `summary`. The text has one more line, which counts the written line comments and names the summary
+ * comment; the JSON gives the written line comments and the summary comment their `comment_ref` too.
  */
 @Service("kerpeten:review-printer")
 export class ReviewPrinter {
@@ -43,9 +48,10 @@ export class ReviewPrinter {
 
     if ("judge_error" in finding) return { ...reviewer, judge_error: finding.judge_error, action: finding.action };
 
-    const { verdict, priority, nature, fix_effort, rationale, score, action } = finding;
+    const { verdict, priority, nature, fix_effort, rationale, score, action, comment_ref } = finding;
+    const judged = { ...reviewer, verdict, priority, nature, fix_effort, rationale, score, action };
 
-    return { ...reviewer, verdict, priority, nature, fix_effort, rationale, score, action };
+    return comment_ref === undefined ? judged : { ...judged, comment_ref };
   }
 
   private static mergeRequestFields(mergeRequest: ReviewedMergeRequest): MergeRequestJson {
@@ -65,13 +71,17 @@ export class ReviewPrinter {
 
   private static commentPlanFields(plan: CommentPlan): CommentPlanJson {
     return {
-      line_comments: plan.lineComments.map(({ file, startLine, endLine, body }) => ({
+      line_comments: plan.lineComments.map(({ file, startLine, endLine, body, ref }) => ({
         file,
         start_line: startLine,
         end_line: endLine,
         body,
+        ...(ref === undefined ? {} : { comment_ref: ref }),
       })),
-      summary: { body: plan.summary.body },
+      summary: {
+        body: plan.summary.body,
+        ...(plan.summary.ref === undefined ? {} : { comment_ref: plan.summary.ref }),
+      },
     };
   }
 
@@ -79,6 +89,13 @@ export class ReviewPrinter {
     const { inline, summary, duplicate, stored } = plan.counts;
 
     return `comment plan: ${inline} line comments, ${summary} in the summary, ${duplicate} already written, ${stored} stored`;
+  }
+
+  /** The line of a review that wrote its comments: how many line comments are written, and the summary comment by its ref. */
+  private static writtenSummary(plan: CommentPlan): string {
+    const summary = plan.summary.ref === undefined ? "not written" : terminalLine(plan.summary.ref);
+
+    return `comments written: ${plan.lineComments.length} line comments, summary comment ${summary}`;
   }
 
   private static mergeRequestSummary(mergeRequest: ReviewedMergeRequest): string {
@@ -90,7 +107,9 @@ export class ReviewPrinter {
   private static judgeSummary(finding: PlannedFinding): string {
     if ("judge_error" in finding) return `judge_error ${terminalLine(finding.judge_error)}, action ${finding.action}`;
 
-    return `verdict ${finding.verdict}, priority ${finding.priority}, nature ${finding.nature}, fix_effort ${finding.fix_effort}, score ${finding.score}, action ${finding.action}`;
+    const ref = finding.comment_ref === undefined ? "" : `, comment_ref ${terminalLine(finding.comment_ref)}`;
+
+    return `verdict ${finding.verdict}, priority ${finding.priority}, nature ${finding.nature}, fix_effort ${finding.fix_effort}, score ${finding.score}, action ${finding.action}${ref}`;
   }
 
   private usageSummary(entry: UsageEntry): string {
@@ -117,6 +136,10 @@ export class ReviewPrinter {
     io.out(`findings: ${result.findings.length}`);
 
     if (result.commentPlan !== undefined) io.out(ReviewPrinter.commentPlanSummary(result.commentPlan));
+
+    if (result.commentPlan !== undefined && result.unwritten !== undefined) {
+      io.out(ReviewPrinter.writtenSummary(result.commentPlan));
+    }
 
     for (const finding of result.findings) {
       io.out(

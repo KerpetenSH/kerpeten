@@ -1,10 +1,14 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ExitCode } from "@kerpetensh/harness-kit";
 import { KerpetenApp } from "../../src/app/KerpetenApp.ts";
 import { plan, signIn, tempHome } from "../capability/chatgpt/chatgpt-utils.ts";
 import { FakeChatGpt } from "../capability/chatgpt/FakeChatGpt.ts";
 import { commit, sh, tempRepo, write } from "../capability/git/git-utils.ts";
+import { FakeGitHub } from "../capability/platform/FakeGitHub.ts";
+import { fakeGitHub, GITHUB_ORIGIN, gitHub, gitHubWrites, pullJson } from "../capability/platform/platform-utils.ts";
 
 const CONFIG = `models:
   reviewer: { provider: chatgpt, model: gpt-6.1-sol }
@@ -57,15 +61,21 @@ function repo(): string {
   return dir;
 }
 
-async function review(home: string, argv: string[] = ["review", "--dry-run", "--base", "main", "--json"]) {
+/** Runs the command in `cwd`, a new repository when none is given, with the folder `bin` first on the PATH when one is given. */
+async function review(
+  home: string,
+  argv: string[] = ["review", "--dry-run", "--base", "main", "--json"],
+  place: { cwd?: string; bin?: string } = {},
+) {
   const out: string[] = [];
   const err: string[] = [];
+  const path = process.env.PATH ?? "";
 
   const code = await KerpetenApp.run(
     {
       io: { out: (line) => out.push(line), err: (line) => err.push(line) },
-      env: { HOME: home, PATH: process.env.PATH ?? "", KERPETEN_LOG_LEVEL: "debug" },
-      cwd: repo(),
+      env: { HOME: home, PATH: place.bin === undefined ? path : `${place.bin}:${path}`, KERPETEN_LOG_LEVEL: "debug" },
+      cwd: place.cwd ?? repo(),
       now: () => 0,
       chatgpt: fake.endpoints,
     },
@@ -126,6 +136,45 @@ describe("kerpeten review with provider chatgpt", () => {
 
     expect(calls[2]?.json?.reasoning).toMatchObject({ effort: "low" });
     expect(leaks(result.out + result.err)).toEqual([]);
+  });
+
+  test("a review the plan stopped writes nothing to the pull request: the summary comment that is there stays as it is", async () => {
+    const home = await signedInHome();
+    const cwd = repo();
+    const head = sh(cwd, ["rev-parse", "HEAD"]);
+    const base = sh(cwd, ["rev-parse", "main"]);
+
+    sh(cwd, ["remote", "add", "origin", GITHUB_ORIGIN]);
+
+    const good = {
+      id: 77,
+      user: { login: FakeGitHub.USER },
+      body: `## Kerpeten review\n\nA good summary of an earlier run.\n\n<!-- kerpeten:summary v1 head=${head} -->`,
+      created_at: FakeGitHub.NOW,
+    };
+
+    for (const stopped of ["in the judge", "in the reviewer"]) {
+      const bin = mkdtempSync(join(tmpdir(), "kerpeten-review-chatgpt-bin-"));
+
+      dirs.push(bin);
+      fakeGitHub(bin, { pull: pullJson({ headSha: head, baseSha: base }), conversation: [good] });
+
+      fake.responses.push(
+        ...(stopped === "in the judge"
+          ? [() => FakeChatGpt.text("done"), () => FakeChatGpt.text(JSON.stringify({ findings: [FINDING] }))]
+          : []),
+        () => FakeChatGpt.limit(),
+      );
+
+      const result = await review(home, ["review", "--mr", "12"], { cwd, bin });
+
+      expect({ stopped, code: result.code, out: result.out }).toEqual({ stopped, code: ExitCode.FAILED, out: "" });
+      expect(result.err).toContain("the ChatGPT plan usage limit is reached");
+      expect(gitHubWrites(bin)).toEqual([]);
+      expect(gitHub(bin).conversation).toEqual([good]);
+      expect(result.err).not.toContain('"comments written"');
+      expect(result.err).not.toContain("no comment");
+    }
   });
 
   test("a plan limit in the reviewer's tool phase ends the review before the judge", async () => {

@@ -136,7 +136,11 @@ export function planInput(
 
 /** A line comment of Kerpeten that is already on the merge request, as its marker says it. */
 export function writtenLine(file: string, startLine: number, endLine: number, headSha = HEAD): WrittenComment {
-  return { kind: "line", mark: CommentMarker.finding(headSha, file, startLine, endLine).mark };
+  return {
+    kind: "line",
+    mark: CommentMarker.finding(headSha, file, startLine, endLine).mark,
+    ref: "github:review_comment/1",
+  };
 }
 
 /** The titles of findings with their actions, in the order given. */

@@ -15,6 +15,7 @@ import { GitDiff } from "../capability/git/GitDiff.ts";
 import { GitRoot } from "../capability/git/GitRoot.ts";
 import { HeadCommit } from "../capability/git/HeadCommit.ts";
 import { PermissionGroups } from "../capability/PermissionGroups.ts";
+import { GitHubCommentWriter } from "../capability/platform/GitHubCommentWriter.ts";
 import { GitHubPlatform } from "../capability/platform/GitHubPlatform.ts";
 import { GitLabPlatform } from "../capability/platform/GitLabPlatform.ts";
 import { OriginProject } from "../capability/platform/OriginProject.ts";
@@ -51,6 +52,7 @@ import { ReviewWorkflow } from "../workflow/review/ReviewWorkflow.ts";
 import { CandidateStep } from "../workflow/review/step/CandidateStep.ts";
 import { ChangeStep } from "../workflow/review/step/ChangeStep.ts";
 import { CommentPlanStep } from "../workflow/review/step/CommentPlanStep.ts";
+import { CommentWriteStep } from "../workflow/review/step/CommentWriteStep.ts";
 import { JudgeStep } from "../workflow/review/step/JudgeStep.ts";
 import { MergeRequestStep } from "../workflow/review/step/MergeRequestStep.ts";
 import { ReviewerStep } from "../workflow/review/step/ReviewerStep.ts";
@@ -102,6 +104,7 @@ export class KerpetenApp {
     JudgeStep,
     ScoreStep,
     CommentPlanStep,
+    CommentWriteStep,
     Scorer,
     CommentPlanner,
     Prompts,
@@ -130,6 +133,7 @@ export class KerpetenApp {
     GitDiff,
     HeadCommit,
     GitHubPlatform,
+    GitHubCommentWriter,
     GitLabPlatform,
     OriginProject,
     PlatformChoice,

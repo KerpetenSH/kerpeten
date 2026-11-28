@@ -1,6 +1,15 @@
 import { PlatformChoiceError } from "../../capability/platform/PlatformChoiceError.ts";
 import { PlatformError } from "../../capability/platform/PlatformError.ts";
 import { ReviewInputError } from "../../harnesses/review/ReviewInputError.ts";
+import type { JudgedFinding } from "../../harnesses/review/types/review.ts";
+
+/**
+ * Whether the judge could not judge any finding of a review that has findings: every one carries a judge error. Such
+ * a review checked none of what it found, so a review that is to write plans and writes no comment from it.
+ */
+export function judgedNothing(findings: readonly JudgedFinding[]): boolean {
+  return findings.length > 0 && findings.every((finding) => "judge_error" in finding);
+}
 
 /**
  * The error that ends a review of merge request `number` for a failed read from its platform, with the flag before

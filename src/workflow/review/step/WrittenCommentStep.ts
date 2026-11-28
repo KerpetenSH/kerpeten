@@ -34,7 +34,7 @@ export class WrittenCommentStep extends FlowStepBase {
     return comments.flatMap((comment) => {
       const marker = CommentMarker.read(comment.body);
 
-      return marker === undefined ? [] : [{ kind: comment.kind, mark: marker.mark }];
+      return marker === undefined ? [] : [{ kind: comment.kind, mark: marker.mark, ref: comment.ref }];
     });
   }
 

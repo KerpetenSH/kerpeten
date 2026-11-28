@@ -38,6 +38,7 @@ describe("capabilities", () => {
       "git",
       "git-diff",
       "git-root",
+      "github-comment-writer",
       "github-platform",
       "gitlab-platform",
       "repo-jail (permission: repo:read)",
@@ -82,6 +83,7 @@ describe("capabilities", () => {
       git: undefined,
       "git-diff": undefined,
       "git-root": undefined,
+      "github-comment-writer": undefined,
       "github-platform": undefined,
       "gitlab-platform": undefined,
       "repo-jail": "repo:read",
@@ -95,7 +97,7 @@ describe("capabilities", () => {
       /^@Capability\(/m.test(readFileSync(join(root, path), "utf8")),
     );
 
-    expect(marked.length).toBe(16);
+    expect(marked.length).toBe(17);
     expect((await registered()).length).toBe(marked.length);
   });
 });
