@@ -1,5 +1,11 @@
 # kerpeten
 
+## 0.3.0
+
+### Minor Changes
+
+- 3f7a352: `kerpeten review --mr <n>` without `--dry-run` now writes its comments to the GitHub pull request, from the account `gh` is signed in with: a comment on the lines of each finding that earns one and one summary comment, which a later run updates. The output shows a `comment_ref` for every written finding, and the command ends with 1 when a comment could not be written.
+
 ## 0.2.1
 
 ### Patch Changes
