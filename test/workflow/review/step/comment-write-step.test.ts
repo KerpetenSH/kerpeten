@@ -349,6 +349,103 @@ describe("comment write flow step", () => {
     expect(commentWrite?.plan.findings.map((finding) => finding.action)).toEqual(["inline", "stored"]);
   });
 
+  /** Findings of the summary with long texts: `count` of them fill most of the room of one summary comment. */
+  function longListed(count: number): JudgedFinding[] {
+    return Array.from({ length: count }, (_, index) => ({
+      ...labelled,
+      title: `Long ${index + 1}`,
+      body: `Long ${index + 1} ${"x".repeat(9_000)}`,
+      start_line: index + 10,
+      end_line: index + 10,
+      score: 80 - index,
+      action: "summary" as const,
+    }));
+  }
+
+  test("a refused line finding that the summary has no room for is written nowhere: that is a failure with a line of its own", async () => {
+    const lowest: JudgedFinding = { ...onLine2, body: `Refused ${"x".repeat(9_000)}`, score: 60 };
+    const { state, lines } = await planned([lowest, ...longListed(6)]);
+    const refused = { kind: "refused", reason: "Line could not be resolved" } as const;
+
+    expect(state.commentPlan?.summary.omitted).toBe(0);
+
+    const { commentWrite } = await write(state, { 2: refused });
+
+    expect(commentWrite?.plan.summary.omitted).toBe(1);
+    expect(commentWrite?.plan.summary.ref).toBe(SUMMARY_REF);
+    expect(commentWrite?.plan.summary.body).not.toContain("### On line 2");
+
+    expect(commentWrite?.plan.findings.map((finding) => finding.action)).toEqual([
+      "stored",
+      "summary",
+      "summary",
+      "summary",
+      "summary",
+      "summary",
+      "summary",
+    ]);
+
+    expect(commentWrite?.failures).toEqual([
+      "finding on src/a.ts:2: not written: the platform refused a comment on its lines, and the summary comment is too long to hold it",
+    ]);
+
+    expect(lines).toContainEqual({
+      level: "error",
+      message: "finding is written nowhere, it is stored",
+      fields: {
+        place: "src/a.ts:2",
+        error:
+          "not written: the platform refused a comment on its lines, and the summary comment is too long to hold it",
+      },
+    });
+  });
+
+  test("a finding the planned summary showed, pushed out by a refused line finding that joined it, is a failure too", async () => {
+    const highest: JudgedFinding = { ...onLine2, body: `Refused ${"x".repeat(9_000)}`, score: 99 };
+    const { state } = await planned([...longListed(6), highest]);
+    const refused = { kind: "refused", reason: "Line could not be resolved" } as const;
+    const { commentWrite } = await write(state, { 2: refused });
+
+    expect(commentWrite?.plan.summary.body).toContain("### On line 2");
+    expect(commentWrite?.plan.summary.body).not.toContain("### Long 6");
+
+    expect(
+      commentWrite?.plan.findings.map((finding) => ("comment_ref" in finding ? finding.comment_ref : finding.action)),
+    ).toEqual([SUMMARY_REF, SUMMARY_REF, SUMMARY_REF, SUMMARY_REF, SUMMARY_REF, "stored", SUMMARY_REF]);
+
+    expect(commentWrite?.failures).toEqual([
+      "finding on src/a.ts:15: not written: the summary comment is too long to hold it",
+    ]);
+  });
+
+  test("a finding the plan itself left out of the summary for its length is stored and is no failure", async () => {
+    const { state, lines } = await planned([onLine2, ...longListed(8)]);
+
+    expect(state.commentPlan?.summary.omitted).toBe(2);
+
+    const { commentWrite } = await write(state);
+
+    expect(commentWrite?.failures).toEqual([]);
+
+    expect(commentWrite?.plan.findings.map((finding) => finding.action)).toEqual([
+      "inline",
+      "summary",
+      "summary",
+      "summary",
+      "summary",
+      "summary",
+      "summary",
+      "stored",
+      "stored",
+    ]);
+
+    expect(lines).toContainEqual({
+      level: "warn",
+      message: "summary comment does not show every finding, the ones left out are stored",
+      fields: { omitted: 2 },
+    });
+  });
+
   test("a review without findings writes no line comment and still writes the summary", async () => {
     const { state } = await planned([]);
     const { commentWrite, calls } = await write(state);

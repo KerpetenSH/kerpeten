@@ -8,12 +8,14 @@ import type { ScoreStep } from "./ScoreStep.ts";
  * Plans the comments of a review of a merge request: gives every finding the action a posted review would take and
  * writes the texts of the line comments and of the summary comment. It writes nothing to the merge request: the
  * comment write flow step does that, after it. A review of no merge request has no plan, and neither has one whose
- * reviewer gave no result, because there is nothing true to say about it.
+ * reviewer gave no result, because there is nothing true to say about it. The same holds for a review the ChatGPT
+ * plan stopped, in the reviewer or in the judge: the command ends such a review with an error and prints no finding,
+ * so no comment is planned from what it has, and none is written.
  */
 @FlowStep({
   name: "comment-plan",
   description:
-    "Plans the comments of a review of a merge request: the action of every finding and the texts of the line comments and the summary comment, without writing them; a review without a merge request has no plan.",
+    "Plans the comments of a review of a merge request: the action of every finding and the texts of the line comments and the summary comment, without writing them; a review without a merge request, one whose reviewer gave no result and one the ChatGPT plan stopped have no plan.",
 })
 export class CommentPlanStep extends FlowStepBase {
   @Inject(CommentPlanner)
@@ -22,7 +24,9 @@ export class CommentPlanStep extends FlowStepBase {
   public execute(state: After<typeof ScoreStep>) {
     const { written, change, config, review, judged, log } = state;
 
-    if (written === undefined || !review.completed) return { commentPlan: undefined };
+    const stopped = state.plan?.adapter.failure !== undefined;
+
+    if (written === undefined || !review.completed || stopped) return { commentPlan: undefined };
 
     const partialReason = review.partialReason ?? judged?.partialReason;
 

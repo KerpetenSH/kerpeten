@@ -5,7 +5,7 @@ import { PlatformChoice } from "../../../capability/platform/PlatformChoice.ts";
 import type { PlatformLineComment, PlatformWriter, SummaryWrite } from "../../../capability/platform/types/platform.ts";
 import { CommentMarker } from "../../../layer/comment/CommentMarker.ts";
 import { CommentPlanner } from "../../../layer/comment/CommentPlanner.ts";
-import type { LineComment, WrittenComment } from "../../../layer/comment/types/comment.ts";
+import type { CommentPlan, LineComment, WrittenComment } from "../../../layer/comment/types/comment.ts";
 import type { Logger } from "../../../log/Logger.ts";
 import { terminalLine } from "../../../text/text-utils.ts";
 import type { CommentWrite } from "../types/review-workflow.ts";
@@ -35,8 +35,19 @@ import type { CommentPlanStep } from "./CommentPlanStep.ts";
  * summary comment per account that cannot change the other's.
  *
  * A comment that cannot be written does not stop the others. Each is logged and gives one line of `failures`, which
- * the command reports and ends with 1 for. A refused line comment is no failure: its finding is in the summary. A
- * second run writes no line comment twice, because the comments of the first are known by their markers.
+ * the command reports and ends with 1 for. A second run writes no line comment twice, because the comments of the
+ * first are known by their markers.
+ *
+ * The rule for a failure is about findings, not about calls: a finding whose text the plan was to write, on its lines
+ * or in the summary, and whose text is in no written comment at the end, is a failure of the write, whatever took it
+ * there. So a refused line comment is no failure while its finding is in the written summary; it is one when the
+ * summary fails, which the line of the summary says, and when the summary is too long to hold the finding, which
+ * gets a line of its own. A finding the summary showed in the plan and that a finding joining it pushed out is one
+ * too. A finding the plan itself already left out of the summary for its length is none: the plan never was to write
+ * it, and the summary says how many it leaves out.
+ *
+ * A review that ended in an error writes nothing: an error thrown before this flow step ends the workflow, and a
+ * review whose reviewer gave no result or that the ChatGPT plan stopped has no plan to write.
  *
  * Runs of one merge request are not kept apart. The comments that are there are read at the start of a run, before
  * the models are called, and nothing is locked: two runs that overlap can both write the line comment of a finding
@@ -66,9 +77,35 @@ export class CommentWriteStep extends FlowStepBase {
   }
 
   private static place(comment: LineComment): string {
-    const { startLine, endLine } = comment;
+    return CommentWriteStep.lines(comment.file, comment.startLine, comment.endLine);
+  }
 
-    return `${terminalLine(comment.file)}:${startLine === endLine ? startLine : `${startLine}-${endLine}`}`;
+  private static lines(file: string, startLine: number, endLine: number): string {
+    return `${terminalLine(file)}:${startLine === endLine ? startLine : `${startLine}-${endLine}`}`;
+  }
+
+  /**
+   * One line for each finding that a written summary leaves out for its length although the plan was to write it:
+   * `meant` says for every finding whether the plan was, `listed` is the plan the summary was written from and
+   * `final` the plan after it. A finding that was to have a line comment got there because the platform refused it.
+   */
+  private static leftOut(planned: CommentPlan, meant: readonly boolean[], listed: CommentPlan, final: CommentPlan) {
+    return final.findings.flatMap((finding, index) => {
+      const written = "comment_ref" in finding && finding.comment_ref !== undefined;
+
+      if (written || meant[index] !== true || listed.findings[index]?.action !== "summary") return [];
+
+      const refused = planned.findings[index]?.action === "inline";
+
+      return [
+        {
+          place: CommentWriteStep.lines(finding.file, finding.start_line, finding.end_line),
+          error: refused
+            ? "not written: the platform refused a comment on its lines, and the summary comment is too long to hold it"
+            : "not written: the summary comment is too long to hold it",
+        },
+      ];
+    });
   }
 
   /**
@@ -153,6 +190,12 @@ export class CommentWriteStep extends FlowStepBase {
     }
 
     const plan = this.planner.afterSummary(afterLines, summaryRef);
+    const meant = this.planner.writes(commentPlan);
+
+    for (const left of summaryRef === undefined ? [] : CommentWriteStep.leftOut(commentPlan, meant, afterLines, plan)) {
+      log.error("finding is written nowhere, it is stored", left);
+      failures.push(`finding on ${left.place}: ${left.error}`);
+    }
 
     log.info("comments written", {
       line_comments: plan.lineComments.length,

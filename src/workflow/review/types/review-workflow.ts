@@ -1,3 +1,4 @@
+import type { ChatGptPlan } from "../../../capability/chatgpt/ChatGptPlan.ts";
 import type { KerpetenConfig } from "../../../capability/config/types/config.ts";
 import type { MergeRequest } from "../../../capability/platform/types/platform.ts";
 import type { JudgeStepResult } from "../../../harnesses/judge/types/judge.ts";
@@ -15,7 +16,9 @@ import type { Logger } from "../../../log/Logger.ts";
 /**
  * What one review run is about, and what belongs to that run alone: its configuration, its two model clients and its
  * log. It is also the values of the run: run components read `repo`, `pathEnv` and `log` with `@RunValue`. With
- * `dryRun` a review of a merge request writes nothing to it; without it the review writes its comments.
+ * `dryRun` a review of a merge request writes nothing to it; without it the review writes its comments. `plan` is
+ * the ChatGPT plan the models of the run count against, when they do: once it refused a request, the review has no
+ * result, so it plans and writes no comment.
  */
 export interface ReviewInput {
   readonly repo: string;
@@ -29,6 +32,7 @@ export interface ReviewInput {
   readonly config: KerpetenConfig;
   readonly reviewerClient: ProviderLlm;
   readonly judgeClient: ProviderLlm;
+  readonly plan?: ChatGptPlan | undefined;
   readonly log: Logger;
 }
 

@@ -649,6 +649,41 @@ describe("comment planner: the plan after the comments were written", () => {
     expect(after.findings.map((planned) => planned.title)).toEqual([...titles].reverse());
   });
 
+  test("a plan says for every finding whether it writes its text: on its lines, or in the summary when the text shows it", () => {
+    expect(planner.writes(before)).toEqual([true, false, true, true, true, false]);
+
+    expect(actions(before.findings)).toEqual([
+      "Third: inline",
+      "Low: stored",
+      "First: inline",
+      "Listed: summary",
+      "Second: inline",
+      "Unjudged: stored",
+    ]);
+
+    const long = "x".repeat(9_000);
+    const titles = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"];
+
+    const many = titles.map((title, index) =>
+      finding({
+        title,
+        body: `${title} ${long}`,
+        start_line: index + 1,
+        end_line: index + 1,
+        score: 49 - index,
+        action: "summary",
+      }),
+    );
+
+    const duplicate = finding({ title: "Duplicate", start_line: 22, end_line: 23 });
+    const plan = planner.plan(planInput([...many, duplicate], { written: [writtenLine("src/a.ts", 22, 23)] }));
+    const shown = titles.length - plan.summary.omitted;
+
+    expect(plan.summary.omitted).toBeGreaterThan(0);
+    expect(planner.writes(plan)).toEqual([...titles.map((_, index) => index < shown), false]);
+    expect(planner.writes(planner.plan(planInput([])))).toEqual([]);
+  });
+
   test("a review without findings has a summary to write, and nothing changes in its plan but the ref", () => {
     const empty = planner.plan(planInput([]));
     const afterLines = planner.afterLineComments({ plan: empty, results: [], ...basis });

@@ -163,14 +163,8 @@ export class CommentPlanner {
    * the summary, are stored. Without a ref the summary was not written, and all its findings are stored.
    */
   public afterSummary(plan: CommentPlan, ref: string | undefined): CommentPlan {
-    const listed = plan.findings
-      .map((finding, index) => ({ finding, index }))
-      .filter((entry) => entry.finding.action === "summary")
-      .sort((one, other) => CommentPlanner.byRank(one.finding, other.finding));
-
-    const shown = new Set(
-      listed.slice(0, ref === undefined ? 0 : listed.length - plan.summary.omitted).map((entry) => entry.index),
-    );
+    const listed = plan.findings.filter((finding) => finding.action === "summary").length;
+    const shown = ref === undefined ? new Set<number>() : CommentPlanner.shown(plan);
 
     const findings = plan.findings.map((finding, index) => {
       if ("judge_error" in finding || finding.action !== "summary") return finding;
@@ -184,8 +178,32 @@ export class CommentPlanner {
       ...plan,
       findings,
       summary: ref === undefined ? plan.summary : { ...plan.summary, ref },
-      counts: { ...plan.counts, summary: shown.size, stored: plan.counts.stored + listed.length - shown.size },
+      counts: { ...plan.counts, summary: shown.size, stored: plan.counts.stored + listed - shown.size },
     };
+  }
+
+  /**
+   * For every finding of `plan`, in the plan's order, whether the plan writes its text: a finding with a line comment,
+   * and a finding of the summary that the summary text shows. A finding the summary leaves out because the comment
+   * would be too long is not written by the plan, and neither is a stored finding or a duplicate.
+   */
+  public writes(plan: CommentPlan): boolean[] {
+    const shown = CommentPlanner.shown(plan);
+
+    return plan.findings.map((finding, index) => finding.action === "inline" || shown.has(index));
+  }
+
+  /**
+   * The places in `plan.findings` of the findings the summary text of the plan shows: the findings of the summary in
+   * the summary's order, without the last ones that the text leaves out.
+   */
+  private static shown(plan: CommentPlan): Set<number> {
+    const listed = plan.findings
+      .map((finding, index) => ({ finding, index }))
+      .filter((entry) => entry.finding.action === "summary")
+      .sort((one, other) => CommentPlanner.byRank(one.finding, other.finding));
+
+    return new Set(listed.slice(0, listed.length - plan.summary.omitted).map((entry) => entry.index));
   }
 
   /** A finding after its line comment was given to the platform; a finding that had no line comment stays as it is. */
