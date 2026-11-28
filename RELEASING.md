@@ -13,13 +13,13 @@ Nobody writes the version by hand. [Changesets](https://changesets.dev) raises i
 
 1. **Pull requests add changesets.** A pull request that changes what a user gets adds a file under `.changeset/` that says `patch`, `minor` or `major` and describes the change in a sentence or two. [.changeset/README.md](.changeset/README.md) shows the file.
 2. **The version pull request opens by itself.** After every merge to `master`, the `release` workflow looks for changeset files. When there are some, it opens a pull request named `chore: version packages`, or updates the open one. That pull request raises the `version` in `package.json` by the largest bump among the files, moves their texts into `CHANGELOG.md` and removes the files.
-3. **Merging it releases.** Merge the version pull request when the version should go out. The `release` workflow then runs the same jobs as every pull request: the checks, the four tarballs, and an install of those tarballs with npm on Linux x64, Linux arm64 and macOS arm64. It publishes the same tarballs, the platform packages first and `kerpeten` last, and creates the GitHub release `v<version>` with the section of `CHANGELOG.md` as its text.
+3. **Merging it releases.** Merge the version pull request when the version should go out. The `release` workflow then runs the same jobs as every pull request: the checks, the four tarballs, and an install of those tarballs with npm on Linux x64, Linux arm64 and macOS arm64. It publishes the same tarballs, the platform packages first. Then it waits until npm shows each platform package, and only then publishes `kerpeten`, so that an install of the new `kerpeten` always finds its binary. Last it creates the GitHub release `v<version>` with the section of `CHANGELOG.md` as its text.
 
 Good to know:
 
 - The workflow publishes whenever the version in `package.json` is not on npm yet. A package version that is already on npm is skipped, so a failed run can be started again, and a merge without a new version publishes nothing.
 - The version pull request is opened by GitHub Actions, and GitHub starts no checks on such a pull request. The checks run on `master` right after the merge, before anything is published.
-- npm shows a new version a few minutes after it is published. An install right after a release can still fail with `No matching version found`.
+- npm shows a new version some minutes after it is published; a platform package of about 50 MB took nine minutes for 0.3.0. The workflow waits up to 30 minutes for the platform packages. When one is still missing then, the run fails and `kerpeten` is not published: start the run again later, and it publishes only what is missing.
 - The README badge of the version reads npm, so it follows by itself.
 
 ## Trusted publishing
@@ -40,9 +40,23 @@ Publish the tarballs that the workflow built and ran on all three platforms, not
    ```
 
 2. Sign in: `npm login`.
-3. Publish the platform packages, then the main package:
+3. Publish the platform packages:
 
    ```sh
    cd tarballs
-   for tarball in kerpetensh-kerpeten-*.tgz kerpeten-*.tgz; do npm publish "$tarball" --access public; done
+   for tarball in kerpetensh-kerpeten-*.tgz; do npm publish "$tarball" --access public; done
+   ```
+
+4. Wait until npm shows all three, which can take some minutes. With the new version in the place of `<version>`, each of these prints the version when npm shows it:
+
+   ```sh
+   npm view @kerpetensh/kerpeten-linux-x64@<version> version --prefer-online
+   npm view @kerpetensh/kerpeten-linux-arm64@<version> version --prefer-online
+   npm view @kerpetensh/kerpeten-darwin-arm64@<version> version --prefer-online
+   ```
+
+5. Then publish the main package:
+
+   ```sh
+   npm publish kerpeten-*.tgz --access public
    ```
