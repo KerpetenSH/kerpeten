@@ -1,6 +1,6 @@
 {
   "name": "kerpeten",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "A code review CLI: a reviewer model finds defects in a change, a judge model checks each finding.",
   "author": "LibirSoft",
   "license": "MIT",
