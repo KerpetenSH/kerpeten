@@ -113,6 +113,7 @@ export function fakeGh(dir: string, answers: Readonly<Record<string, CliAnswer>>
 export function fakeGitHub(dir: string, start: FakeGitHubStart = {}): string {
   const state: FakeGitHubState = {
     pull: start.pull ?? pullJson(),
+    pullReads: 0,
     nextId: 9001,
     reviews: [],
     lineComments: [...(start.lineComments ?? [])],

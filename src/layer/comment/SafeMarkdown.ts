@@ -13,14 +13,22 @@ import type { CodeFence } from "./types/comment.ts";
  *   nothing: a mention of a user or a team (`@name`, `@org/team`), which would notify them from the account the
  *   comment is sent from, and a reference to an issue or a pull request (`#12`, `owner/repo#12`, `owner#12`,
  *   `GH-12`), which would link it and leave a note there. A backslash before such an `@` or `#` is dropped, because
- *   the platform looks for them in the text as it is shown. A character reference that stands for `@` or `#`, such
- *   as `&#64;`, gets a backslash, so it is shown as written and makes neither; any other character reference, such as
- *   `&#65;`, stays whole, so its number is not taken for an issue. The address of a link that holds such
- *   text is cut by the code span, and the link is then shown as text. Two code spans cannot touch, because their
- *   backticks would be read as one mark: where such a code span would touch another, a zero-width space stands
- *   between the two.
+ *   the platform looks for them in the text as it is shown. A backslash right before a reference that starts with a
+ *   letter or a digit is shown and gets a second one, so it cannot escape the backtick of the code span. A character
+ *   reference that stands for `@` or `#`, such as `&#64;`, gets a backslash, so it is shown as written and makes
+ *   neither; any other character reference, such as `&#65;`, stays whole, so its number is not taken for an issue.
+ *   The address of a link that holds such text is cut by the code span, and the link is then shown as text. Two code
+ *   spans cannot touch, because their backticks would be read as one mark: where such a code span would touch
+ *   another, a zero-width space stands between the two.
  * - Code stays as it is: a fenced code block, and a code span that opens and closes on one line. So `Array<string>` in
  *   backticks and a `<div>` in a code block read as written, and so does an `@name` or a `#12` there.
+ * - In a text that may hold a table a code span ends where its cell ends. A row of a table is cut into its cells at
+ *   every `|` before its code spans are read, so backticks in two cells make no code span there, and what stands
+ *   between them would act. Such backticks get a backslash, and the text between them is treated as text. A `|`
+ *   right after a backslash that no other backslash escapes ends no cell, so a span with `\|` in it stays whole. A
+ *   text may hold a table when one of its lines could be the row under the head of a table with two or more columns:
+ *   a line with a `|` and a `-` that holds nothing else but `:`, spaces and the marks of a quote or a list. In any
+ *   other text a code span keeps its `|`.
  * - A fenced code block that is left open is closed, so the text after it is not shown as code.
  * - Text for a place inside a line is safe at its two ends, because the program writes its own marks right before and
  *   after it, such as the `**` around a title. A backslash that ends it gets a second one, so it shows as a backslash
@@ -48,6 +56,10 @@ export class SafeMarkdown {
   private static readonly JOINS_AFTER = "*#";
 
   private static readonly BETWEEN_SPANS = "\u200b";
+
+  private static readonly CELL_END = "|";
+
+  private static readonly UNDER_TABLE_HEAD = /^(?=.*\|)(?=.*-)[\s|:\->*+0-9.)]*$/;
 
   private static readonly NAME_MARKS = "_./-";
 
@@ -79,12 +91,14 @@ export class SafeMarkdown {
   /** Text of one or more lines that starts at the start of a line. */
   public static block(text: string): string {
     const lines: string[] = [];
+    const written = SafeMarkdown.plain(text).split("\n");
+    const cells = written.some((line) => SafeMarkdown.UNDER_TABLE_HEAD.test(line));
     let fence: CodeFence | undefined;
 
-    for (const line of SafeMarkdown.plain(text).split("\n")) {
+    for (const line of written) {
       if (fence === undefined) {
         fence = SafeMarkdown.opening(line);
-        lines.push(fence === undefined ? SafeMarkdown.inline(line) : line.slice(fence.indent));
+        lines.push(fence === undefined ? SafeMarkdown.inline(line, cells) : line.slice(fence.indent));
       } else {
         const shown = SafeMarkdown.unindented(line, fence.indent);
         const closed = SafeMarkdown.closes(shown, fence);
@@ -152,7 +166,11 @@ export class SafeMarkdown {
     return line.slice(spaces);
   }
 
-  private static inline(line: string): string {
+  /**
+   * One line of text outside a code block, made safe. With `cells` the line may be a row of a table, so a code span
+   * ends before the `|` that ends its cell.
+   */
+  private static inline(line: string, cells = false): string {
     const parts: string[] = [];
     let at = 0;
     let last = "";
@@ -178,6 +196,8 @@ export class SafeMarkdown {
       const reference = char === "&" ? SafeMarkdown.matched(SafeMarkdown.DECIMAL_REFERENCE, line, at) : undefined;
 
       if (acting !== undefined) {
+        if (!escaped && SafeMarkdown.backslashesBefore(line, at) % 2 === 1) text("\\");
+
         span(`\`${acting}\``);
         at += acting.length + (escaped ? 1 : 0);
       } else if (char === "&" && SafeMarkdown.matched(SafeMarkdown.ACTING_REFERENCE, line, at) !== undefined) {
@@ -191,7 +211,8 @@ export class SafeMarkdown {
         at += 2;
       } else if (char === "`") {
         const length = SafeMarkdown.runLength(line, at);
-        const close = SafeMarkdown.closingRun(line, at + length, length);
+        const limit = cells ? SafeMarkdown.cellEnd(line, at + length) : line.length;
+        const close = SafeMarkdown.closingRun(line, at + length, length, limit);
         const end = close < 0 ? at + length : close + length;
 
         if (close < 0) text("\\`".repeat(length));
@@ -293,11 +314,28 @@ export class SafeMarkdown {
     return end - from;
   }
 
-  /** Where the next run of exactly `length` backticks starts at or after `from`, or -1 when the line has none. */
-  private static closingRun(line: string, from: number, length: number): number {
+  /**
+   * Where the cell of a table that holds the place `from` of the line ends: at the next `|` that no backslash
+   * escapes, or at the end of the line. A `|` is escaped when the backslashes right before it are odd in number.
+   */
+  private static cellEnd(line: string, from: number): number {
+    let at = line.indexOf(SafeMarkdown.CELL_END, from);
+
+    while (at >= 0 && SafeMarkdown.backslashesBefore(line, at) % 2 === 1) {
+      at = line.indexOf(SafeMarkdown.CELL_END, at + 1);
+    }
+
+    return at < 0 ? line.length : at;
+  }
+
+  /**
+   * Where the next run of exactly `length` backticks starts at or after `from` and before `limit`, or -1 when the
+   * line has none there.
+   */
+  private static closingRun(line: string, from: number, length: number, limit: number): number {
     let at = line.indexOf("`", from);
 
-    while (at >= 0) {
+    while (at >= 0 && at < limit) {
       const run = SafeMarkdown.runLength(line, at);
 
       if (run === length) return at;

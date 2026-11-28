@@ -48,6 +48,8 @@ export interface FakeIssueComment {
  * - `keepsReview`: with `review` set, the review is kept all the same, as when GitHub wrote it and gh did not answer.
  * - `foreignComments`: the ids of the comments of the conversation that another account wrote: an update of one is
  *   refused with HTTP 403 and changes nothing.
+ * - `movesTo`: the commit the pull request is at from its second read on, as when a commit is pushed while a review
+ *   runs.
  */
 export interface FakeGitHubRules {
   readonly refusedLines?: readonly number[];
@@ -57,6 +59,7 @@ export interface FakeGitHubRules {
   readonly readBack?: CliAnswer;
   readonly keepsReview?: boolean;
   readonly foreignComments?: readonly number[];
+  readonly movesTo?: string;
 }
 
 /** One call of the fake gh: its arguments, and what it read from its standard input when it was told to read it. */
@@ -68,6 +71,7 @@ export interface FakeGitHubCall {
 /** What the fake GitHub holds, kept in a file between the calls of the fake gh: one pull request and its comments. */
 export interface FakeGitHubState {
   readonly pull: string;
+  pullReads: number;
   nextId: number;
   readonly reviews: FakeReview[];
   readonly lineComments: FakeLineComment[];

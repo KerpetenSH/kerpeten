@@ -147,12 +147,14 @@ export interface LineWriteInput {
 
 /**
  * What the summary comment says beside its findings. `unwritten` counts the findings whose line comment was given to
- * the platform and failed; it is left out before anything is written.
+ * the platform and failed; it is left out before anything is written. `unjudged` counts the findings the judge could
+ * not judge, which are stored and never written.
  */
 export interface SummaryFacts {
   readonly lineComments: number;
   readonly alreadyWritten: number;
   readonly unwritten?: number;
+  readonly unjudged?: number;
   readonly partialReason?: string;
 }
 
@@ -166,6 +168,7 @@ export interface CommentWordSet {
   readonly cut: string;
   reviewed(commit: string, lineComments: number, alreadyWritten: number): string;
   unwritten(count: number): string;
+  unjudged(count: number): string;
   partial(reason: string): string;
   omitted(count: number): string;
 }

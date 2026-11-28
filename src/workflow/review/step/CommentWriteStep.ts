@@ -2,13 +2,16 @@ import { Inject } from "@asenajs/ioc";
 import { type After, FlowStep, FlowStepBase, Use } from "@kerpetensh/harness-kit";
 import { CommentRef } from "../../../capability/platform/CommentRef.ts";
 import { PlatformChoice } from "../../../capability/platform/PlatformChoice.ts";
+import { PlatformError } from "../../../capability/platform/PlatformError.ts";
+import { PlatformWords } from "../../../capability/platform/PlatformWords.ts";
 import type { PlatformLineComment, PlatformWriter, SummaryWrite } from "../../../capability/platform/types/platform.ts";
 import { CommentMarker } from "../../../layer/comment/CommentMarker.ts";
 import { CommentPlanner } from "../../../layer/comment/CommentPlanner.ts";
 import type { CommentPlan, LineComment, WrittenComment } from "../../../layer/comment/types/comment.ts";
 import type { Logger } from "../../../log/Logger.ts";
 import { terminalLine } from "../../../text/text-utils.ts";
-import type { CommentWrite } from "../types/review-workflow.ts";
+import { judgedNothing } from "../review-utils.ts";
+import type { CommentWrite, ReviewedMergeRequest } from "../types/review-workflow.ts";
 import type { CommentPlanStep } from "./CommentPlanStep.ts";
 
 /**
@@ -47,7 +50,21 @@ import type { CommentPlanStep } from "./CommentPlanStep.ts";
  * it, and the summary says how many it leaves out.
  *
  * A review that ended in an error writes nothing: an error thrown before this flow step ends the workflow, and a
- * review whose reviewer gave no result or that the ChatGPT plan stopped has no plan to write.
+ * review whose reviewer gave no result or that the ChatGPT plan stopped has no plan to write. Neither has a review
+ * whose judge could not judge any of its findings. Such a review ran to its end and its findings are printed, but no
+ * comment stands for them, so it gives one line of `failures` that says so. A review the ChatGPT plan stopped gives
+ * none: the command ends it with the plan's error.
+ *
+ * The merge request can get a new commit while the review runs. So the merge request is read once more right before
+ * the first write, and when its last commit is no longer the reviewed one, or it cannot be read, nothing is written,
+ * every finding that was to be written is stored, and one line of `failures` says so. A limit: between that read and
+ * the writes a commit can still arrive, and the comments are then written for the commit before it. The line
+ * comments are sent with the reviewed commit, and the summary names it.
+ *
+ * Another limit: the summary comment always shows the latest run. Its marker names the commit and nothing else, so a
+ * run cannot tell whether the summary that is there came from a whole review or from one that a limit ended early. A
+ * partial run of the same commit replaces the summary of a whole one, and says in the new text that it is partial.
+ * The line comments of the earlier run stay.
  *
  * Runs of one merge request are not kept apart. The comments that are there are read at the start of a run, before
  * the models are called, and nothing is locked: two runs that overlap can both write the line comment of a finding
@@ -57,7 +74,7 @@ import type { CommentPlanStep } from "./CommentPlanStep.ts";
 @FlowStep({
   name: "comment-write",
   description:
-    "Writes the planned comments to the merge request: the line comments in one write, then the one summary comment, made or updated; a line comment the platform refuses goes to the summary and one that fails leaves its finding stored; with --dry-run, or without a plan, it writes nothing.",
+    "Writes the planned comments to the merge request, after it read the merge request once more and found it at the reviewed commit: the line comments in one write, then the one summary comment, made or updated; a line comment the platform refuses goes to the summary and one that fails leaves its finding stored; with --dry-run, or without a plan, it writes nothing.",
 })
 export class CommentWriteStep extends FlowStepBase {
   @Inject(CommentPlanner)
@@ -118,11 +135,24 @@ export class CommentWriteStep extends FlowStepBase {
       .map((comment) => comment.ref);
   }
 
+  /** Why a review whose judge could not judge any of its `count` findings wrote no comment. */
+  private static unjudged(count: number): string {
+    return count === 1
+      ? "the judge could not judge the 1 finding; the output shows it with its judge_error"
+      : `the judge could not judge any of the ${count} findings; the output shows them with their judge_error`;
+  }
+
   public async execute(state: After<typeof CommentPlanStep>) {
     const { commentPlan, mergeRequest, written, change, config, review, judged, log } = state;
 
-    if (state.dryRun || commentPlan === undefined || mergeRequest === undefined || written === undefined) {
-      return { commentWrite: undefined };
+    if (state.dryRun || mergeRequest === undefined || written === undefined) return { commentWrite: undefined };
+
+    if (commentPlan === undefined) {
+      const stopped = state.plan?.adapter.failure !== undefined;
+
+      return !stopped && judgedNothing(state.findings)
+        ? this.nothingWritten(log, CommentWriteStep.unjudged(state.findings.length))
+        : { commentWrite: undefined };
     }
 
     const writer = await this.platforms.writer();
@@ -130,6 +160,23 @@ export class CommentWriteStep extends FlowStepBase {
     if (writer === undefined) throw new Error(`no writer for the platform ${mergeRequest.kind}`);
 
     const { number } = mergeRequest;
+    const partialReason = review.partialReason ?? judged?.partialReason;
+
+    const basis = {
+      headSha: change.headSha,
+      language: config.comment_language,
+      ...(partialReason === undefined ? {} : { partialReason }),
+    };
+
+    const moved = await this.moved(mergeRequest, change.headSha);
+
+    if (moved !== undefined) {
+      const failed = commentPlan.lineComments.map(() => ({ kind: "failed" as const }));
+      const none = this.planner.afterLineComments({ plan: commentPlan, results: failed, ...basis });
+
+      return this.nothingWritten(log, moved, this.planner.afterSummary(none, undefined));
+    }
+
     const failures: string[] = [];
     const planned = commentPlan.lineComments;
 
@@ -155,15 +202,7 @@ export class CommentWriteStep extends FlowStepBase {
 
     for (const problem of lines.problems) log.warn("line comments written", { problem });
 
-    const partialReason = review.partialReason ?? judged?.partialReason;
-
-    const afterLines = this.planner.afterLineComments({
-      plan: commentPlan,
-      results: lines.outcomes,
-      headSha: change.headSha,
-      language: config.comment_language,
-      ...(partialReason === undefined ? {} : { partialReason }),
-    });
+    const afterLines = this.planner.afterLineComments({ plan: commentPlan, results: lines.outcomes, ...basis });
 
     const summaries = CommentWriteStep.summaries(written);
     const summary = await this.writeSummary(writer, number, afterLines.summary.body, summaries, log);
@@ -208,6 +247,41 @@ export class CommentWriteStep extends FlowStepBase {
     const commentWrite: CommentWrite = { plan, failures };
 
     return { commentWrite };
+  }
+
+  /**
+   * The result of a run that was to write and wrote no comment at all, for the reason `why`, which is logged. `plan`
+   * is the plan of the run with every finding it was to write stored, when the run had a plan.
+   */
+  private nothingWritten(log: Logger, why: string, plan?: CommentPlan) {
+    const error = `no comment was written: ${why}`;
+    const commentWrite: CommentWrite = { plan, failures: [error] };
+
+    log.error("no comment written", { error });
+
+    return { commentWrite };
+  }
+
+  /**
+   * Reads the merge request once more and says why nothing may be written to it now: its last commit is no longer
+   * `headSha`, the reviewed one, or it cannot be read. `undefined` when it is still at the reviewed commit.
+   */
+  private async moved(mergeRequest: ReviewedMergeRequest, headSha: string): Promise<string | undefined> {
+    const { number } = mergeRequest;
+    const { noun } = PlatformWords.of(mergeRequest.kind);
+
+    try {
+      const platform = await this.platforms.platform();
+      const now = await platform.mergeRequest(number);
+
+      return now.headSha === headSha
+        ? undefined
+        : `${noun} ${number} moved to commit ${now.headSha} during the review, which is of commit ${headSha}; run again to review the new commit`;
+    } catch (error) {
+      if (!(error instanceof PlatformError)) throw error;
+
+      return `${noun} ${number} could not be read again before the write, so it is not known whether it is still at the reviewed commit: ${terminalLine(error.message)}`;
+    }
   }
 
   /**

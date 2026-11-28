@@ -41,8 +41,34 @@ describe("comment planner: stored findings", () => {
     expect(actions(plan.findings)).toEqual(["Refuted: stored", "Low: stored", "Unjudged: stored"]);
     expect(plan.findings).toEqual([refuted, low, failed]);
     expect(plan.lineComments).toEqual([]);
-    expect(plan.summary).toEqual({ body: NOTHING, omitted: 0 });
     expect(plan.counts).toEqual({ inline: 0, summary: 0, duplicate: 0, stored: 3 });
+
+    expect(plan.summary).toEqual({
+      body: [
+        "## Kerpeten review",
+        `Reviewed commit ${HEAD}. Line comments in this run: 0.`,
+        "Findings that could not be checked, so they are not written here: 1. The output of the review run lists them.",
+        SUMMARY_MARKER,
+      ].join("\n\n"),
+      omitted: 0,
+    });
+
+    expect(planner.plan(planInput([refuted, low])).summary).toEqual({ body: NOTHING, omitted: 0 });
+  });
+
+  test("the count of the findings the judge could not judge stays in the summary that is written again after the line comments", () => {
+    const plan = planner.plan(planInput([finding(), unjudged({ title: "Unjudged" }), unjudged({ title: "Other" })]));
+    const counted = "Findings that could not be checked, so they are not written here: 2.";
+
+    expect(plan.summary.body).toContain(`Line comments in this run: 1.\n\n${counted}`);
+
+    const after = planner.afterLineComments({ plan, results: [{ kind: "failed" }], headSha: HEAD, language: "en" });
+
+    expect(after.summary.body).toContain(
+      `Line comments in this run: 0.\n\nFindings whose comment may be missing here, because writing it failed: 1. The output of the review run lists them.\n\n${counted}`,
+    );
+
+    expect(after.summary.body).not.toContain("nothing to report");
   });
 
   test("a stored finding stays stored when a line comment for its lines is already written", () => {
@@ -477,7 +503,7 @@ describe("comment planner: the plan after the comments were written", () => {
     });
 
     expect(after.summary.body).toContain(
-      "Line comments in this run: 1.\n\nFindings whose comment may be missing here, because writing it failed: 1. The output of the review run lists them.\n\n### Second",
+      "Line comments in this run: 1.\n\nFindings whose comment may be missing here, because writing it failed: 1. The output of the review run lists them.\n\nFindings that could not be checked, so they are not written here: 1. The output of the review run lists them.\n\n### Second",
     );
 
     const refused = planner.afterLineComments({

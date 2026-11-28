@@ -212,6 +212,7 @@ describe("kerpeten review --mr: the comments are written to the pull request", (
 
     expect(github.calls.map((call) => call.args)).toEqual([
       ...READS,
+      [...GH_READ, PULL],
       [...POST, `${PULL}/reviews`, ...FROM_STDIN],
       [...GH_ALL, `${PULL}/reviews/9001/comments?per_page=100`],
       [...POST, CONVERSATION, ...FROM_STDIN],
@@ -302,6 +303,7 @@ describe("kerpeten review --mr: the comments are written to the pull request", (
 
     expect(after.calls.slice(before.calls.length).map((call) => call.args)).toEqual([
       ...READS,
+      [...GH_READ, PULL],
       [...PATCH, "repos/Acme/Shop/issues/comments/9003", ...FROM_STDIN],
     ]);
 
@@ -531,6 +533,97 @@ describe("kerpeten review --mr: a comment that cannot be written", () => {
     expect(reported(result.err)).toEqual([
       `kerpeten review: line comment on src/a.ts:2: not written: your account has a review on this pull request that is not submitted yet, and GitHub takes no other review beside it: submit or delete that review on the page of the pull request and run again (GitHub answered: Unprocessable Entity: ${FakeGitHub.PENDING})`,
     ]);
+  });
+});
+
+describe("kerpeten review --mr: a review that writes nothing at all", () => {
+  /** A summary comment of an earlier run that is on the pull request at `head`. */
+  function goodSummary(head: string): FakeIssueComment {
+    return {
+      id: 77,
+      user: { login: FakeGitHub.USER },
+      body: `## Kerpeten review\n\nA good summary of an earlier run.\n\n<!-- kerpeten:summary v1 head=${head} -->`,
+      created_at: FakeGitHub.NOW,
+    };
+  }
+
+  test("when the judge could not judge any finding, no comment is written and the summary that is there stays: one line says so, the findings are printed, and the review ends with 1", async () => {
+    const { dir, base, head } = repo();
+    const conversation = [goodSummary(head)];
+    const result = await run(dir, ["review", "--mr", "12"], { head, base, conversation, judgeScript: [] });
+
+    expect(result.code).toBe(ExitCode.FAILED);
+
+    expect(reported(result.err)).toEqual([
+      "kerpeten review: no comment was written: the judge could not judge the 1 finding; the output shows it with its judge_error",
+    ]);
+
+    expect(result.out).toContain("findings: 1\n- src/a.ts:2-2 [bug] Division by zero\n  judge_error ");
+    expect(result.out).toContain(", action stored");
+    expect(result.out).not.toContain("comment plan:");
+    expect(result.out).not.toContain("comments written");
+    expect(gitHub(result.bin).calls.map((call) => call.args)).toEqual(READS);
+    expect(gitHub(result.bin).conversation).toEqual(conversation);
+
+    const dry = await run(dir, ["review", "--dry-run", "--mr", "12"], { head, base, conversation, judgeScript: [] });
+
+    expect(dry.code).toBe(ExitCode.OK);
+    expect(reported(dry.err)).toEqual([]);
+    expect(dry.out).toContain("comment plan: 0 line comments, 0 in the summary, 0 already written, 1 stored");
+    expect(dry.out).toContain("- src/a.ts:2-2 [bug] Division by zero\n  judge_error ");
+    expect(gitHubWrites(dry.bin)).toEqual([]);
+  });
+
+  test("when the judge could not judge one finding and refuted the other, the summary is written and counts the one it could not judge: it does not say that nothing was found", async () => {
+    const { dir, base } = repo();
+
+    write(dir, { ".kerpeten.yml": `${CONFIG}limits: { max_judge_parallel: 1 }\n` });
+
+    const head = commit(dir, "judge one finding at a time");
+    const findings = [finding, { ...finding, title: "Never judged" }];
+    const script = [{ text: "done" }, { text: JSON.stringify({ findings }) }];
+    const judgeScript = [{ text: "done" }, { text: JSON.stringify({ ...labels, verdict: "refuted" }) }];
+    const result = await run(dir, ["review", "--mr", "12"], { head, base, script, judgeScript });
+
+    expect(result.code).toBe(ExitCode.OK);
+    expect(reported(result.err)).toEqual([]);
+    expect(result.out).toContain("comment plan: 0 line comments, 0 in the summary, 0 already written, 2 stored");
+    expect(result.out).toContain("comments written: 0 line comments, summary comment github:issue_comment/9001");
+    expect(result.out).toContain("- src/a.ts:2-2 [bug] Never judged\n  judge_error ");
+
+    expect(gitHub(result.bin).conversation.map((comment) => comment.body)).toEqual([
+      [
+        "## Kerpeten review",
+        `Reviewed commit ${head}. Line comments in this run: 0.`,
+        "Findings that could not be checked, so they are not written here: 1. The output of the review run lists them.",
+        `<!-- kerpeten:summary v1 head=${head} -->`,
+      ].join("\n\n"),
+    ]);
+  });
+
+  test("a pull request that got a new commit during the review gets no comment: it is read once more before the write, one line says so, and the review ends with 1", async () => {
+    const { dir, base, head } = repo();
+    const moved = "d".repeat(40);
+    const conversation = [goodSummary(head)];
+    const result = await run(dir, ["review", "--mr", "12"], { head, base, conversation, rules: { movesTo: moved } });
+
+    expect(result.code).toBe(ExitCode.FAILED);
+
+    expect(reported(result.err)).toEqual([
+      `kerpeten review: no comment was written: pull request 12 moved to commit ${moved} during the review, which is of commit ${head}; run again to review the new commit`,
+    ]);
+
+    expect(result.out.split("\n").slice(3, 7)).toEqual([
+      "comment plan: 0 line comments, 0 in the summary, 0 already written, 1 stored",
+      "comments written: 0 line comments, summary comment not written",
+      "- src/a.ts:2-2 [bug] Division by zero",
+      "  verdict verified, priority P0, nature critical, fix_effort easy, score 95, action stored",
+    ]);
+
+    expect(result.out).not.toContain("comment_ref");
+    expect(gitHub(result.bin).calls.map((call) => call.args)).toEqual([...READS, [...GH_READ, PULL]]);
+    expect(gitHub(result.bin).conversation).toEqual(conversation);
+    expect(gitHub(result.bin).lineComments).toEqual([]);
   });
 });
 

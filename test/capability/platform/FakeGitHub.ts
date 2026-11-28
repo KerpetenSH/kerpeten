@@ -116,7 +116,7 @@ export class FakeGitHub {
 
     switch (route) {
       case "GET pulls/N":
-        return { stdout: state.pull };
+        return { stdout: this.pull() };
       case "GET pulls/N/comments":
         return list(state.lineComments);
       case "GET pulls/N/reviews":
@@ -134,6 +134,18 @@ export class FakeGitHub {
       default:
         return { stderr: `the fake gh has no answer for: ${route}\n`, exitCode: FakeGitHub.UNKNOWN_EXIT };
     }
+  }
+
+  /** The pull request as it is read now: at the commit of the rule `movesTo` from the second read on. */
+  private pull(): string {
+    const { state } = this;
+    const moved = state.pullReads++ > 0 ? state.rules.movesTo : undefined;
+
+    if (moved === undefined) return state.pull;
+
+    const pull = JSON.parse(state.pull);
+
+    return JSON.stringify({ ...pull, head: { ...pull.head, sha: moved } });
   }
 
   /** The comments of one review as GitHub lists them there: without the side and the lines of a comment. */

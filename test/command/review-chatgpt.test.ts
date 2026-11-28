@@ -173,6 +173,7 @@ describe("kerpeten review with provider chatgpt", () => {
       expect(gitHubWrites(bin)).toEqual([]);
       expect(gitHub(bin).conversation).toEqual([good]);
       expect(result.err).not.toContain('"comments written"');
+      expect(result.err).not.toContain("no comment");
     }
   });
 

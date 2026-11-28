@@ -22,7 +22,8 @@ import { WrittenFindings } from "./WrittenFindings.ts";
  * The rules, in this order:
  *
  * 1. A finding the scorer stored stays stored: a refuted one, one the judge did not label and one under the summary
- *    threshold. It is never written.
+ *    threshold. It is never written. The summary counts the findings the judge did not label, so it never says that
+ *    the review found nothing while such a finding exists.
  * 2. A finding that a line comment of Kerpeten on the merge request already stands for, at the same commit, file and
  *    lines, is a duplicate and is not written again.
  * 3. A finding the scorer gave a line comment gets one when its whole range lies inside one hunk of its file on the
@@ -86,6 +87,7 @@ export class CommentPlanner {
       summary: texts.summary(listed, {
         lineComments: inline.length,
         alreadyWritten: duplicate,
+        unjudged: CommentPlanner.unjudged(planned),
         ...(input.partialReason === undefined ? {} : { partialReason: input.partialReason }),
       }),
       counts: {
@@ -146,6 +148,7 @@ export class CommentPlanner {
         lineComments: lineComments.length,
         alreadyWritten: plan.counts.duplicate,
         unwritten: results.filter((written) => written.kind === "failed").length,
+        unjudged: CommentPlanner.unjudged(findings),
         ...(input.partialReason === undefined ? {} : { partialReason: input.partialReason }),
       }),
       counts: {
@@ -213,6 +216,11 @@ export class CommentPlanner {
     if (result.kind === "written") return { ...finding, comment_ref: result.ref };
 
     return { ...finding, action: result.kind === "refused" ? "summary" : "stored" };
+  }
+
+  /** How many of the findings the judge could not judge. */
+  private static unjudged(findings: readonly PlannedFinding[]): number {
+    return findings.filter((finding) => "judge_error" in finding).length;
   }
 
   /** The action of a finding before the limit of line comments is applied. */

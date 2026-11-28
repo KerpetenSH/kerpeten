@@ -47,7 +47,9 @@ export interface ReviewedMergeRequest extends MergeRequest {
  *
  * `unwritten` is there when the review wrote its comments to the merge request: one line for each comment that could
  * not be written, and no line when all were. `commentPlan` is then the plan as it was carried out, and the findings
- * carry the refs of their comments.
+ * carry the refs of their comments. It is there too, with one line that says why, when the review was to write and
+ * wrote no comment at all: because the merge request got a new commit during the review, or because the judge could
+ * not judge any finding. In the second case there is no plan.
  */
 export interface ReviewResult extends Omit<LocalReviewResult, "findings"> {
   readonly findings: readonly PlannedFinding[];
@@ -58,10 +60,11 @@ export interface ReviewResult extends Omit<LocalReviewResult, "findings"> {
 
 /**
  * What a review wrote to its merge request: the comment plan as it was carried out, and one line for each comment
- * that could not be written.
+ * that could not be written. A review that was to write and wrote no comment at all has one line that says why, and
+ * no plan when it never had one.
  */
 export interface CommentWrite {
-  readonly plan: CommentPlan;
+  readonly plan: CommentPlan | undefined;
   readonly failures: readonly string[];
 }
 
